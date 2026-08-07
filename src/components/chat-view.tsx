@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ArrowUp, Sparkles } from "lucide-react";
 import { strings, type Lang } from "@/lib/i18n";
 import { subjects } from "@/lib/curriculum-data";
 import type { ChatMessage, ChatThread } from "@/lib/chat-data";
@@ -41,10 +42,10 @@ export function ChatView({ lang, activeChat }: { lang: Lang; activeChat: ChatThr
   const [messages, setMessages] = useState<ChatMessage[]>(activeChat?.messages ?? []);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages, isTyping]);
 
   const handleSend = () => {
@@ -69,7 +70,7 @@ export function ChatView({ lang, activeChat }: { lang: Lang; activeChat: ChatThr
   };
 
   const composer = (
-    <div className="mx-auto flex w-full max-w-2xl items-end gap-2 rounded-2xl border border-border bg-surface p-2 shadow-sm">
+    <div className="mx-auto flex w-full max-w-2xl items-end gap-2 rounded-2xl border border-border bg-surface p-2.5 shadow-md">
       <textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -86,19 +87,30 @@ export function ChatView({ lang, activeChat }: { lang: Lang; activeChat: ChatThr
       <button
         onClick={handleSend}
         disabled={!input.trim()}
-        className="shrink-0 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-accent-foreground disabled:opacity-40"
+        aria-label={strings.send[lang]}
+        className="flex shrink-0 items-center justify-center rounded-full bg-accent p-2 text-accent-foreground disabled:opacity-40"
       >
-        {strings.send[lang]}
+        <ArrowUp size={18} strokeWidth={2} />
       </button>
     </div>
   );
 
   if (messages.length === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-6 p-6">
-        <h1 className="text-xl font-semibold tracking-tight sm:text-2xl">
-          {strings.chatGreeting[lang]}
-        </h1>
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-8 p-6">
+        <div className="flex flex-col items-center gap-4 text-center">
+          <div className="flex size-12 items-center justify-center rounded-2xl bg-accent-soft text-accent">
+            <Sparkles size={24} strokeWidth={1.75} />
+          </div>
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+              {strings.chatGreeting[lang]}
+            </h1>
+            <p className="mx-auto mt-2 max-w-md text-sm text-foreground-muted">
+              {strings.chatSubtitle[lang]}
+            </p>
+          </div>
+        </div>
         {composer}
         <div className="flex max-w-2xl flex-wrap justify-center gap-2">
           {subjects.slice(0, 5).map((s) => (
@@ -116,22 +128,23 @@ export function ChatView({ lang, activeChat }: { lang: Lang; activeChat: ChatThr
   }
 
   return (
-    <div className="flex h-full flex-col">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto">
-        <div className="mx-auto flex max-w-2xl flex-col gap-4 p-4 sm:p-6">
-          {messages.map((m, i) => (
-            <Bubble key={i} message={m} lang={lang} />
-          ))}
-          {isTyping && (
-            <div className="flex justify-start">
-              <div className="rounded-2xl border border-border bg-surface px-4 py-2.5 text-sm text-foreground-muted">
-                …
-              </div>
+    <div className="flex flex-col">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-4 sm:p-6">
+        {messages.map((m, i) => (
+          <Bubble key={i} message={m} lang={lang} />
+        ))}
+        {isTyping && (
+          <div className="flex justify-start">
+            <div className="rounded-2xl border border-border bg-surface px-4 py-2.5 text-sm text-foreground-muted">
+              …
             </div>
-          )}
-        </div>
+          </div>
+        )}
+        <div ref={bottomRef} />
       </div>
-      <div className="border-t border-border p-3 sm:p-4">{composer}</div>
+      <div className="sticky bottom-16 border-t border-border bg-background p-3 sm:p-4 md:bottom-0">
+        {composer}
+      </div>
     </div>
   );
 }

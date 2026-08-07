@@ -1,46 +1,42 @@
 export type CurriculumTrack = "bangla" | "english";
-export type SubjectGroup = "science" | "humanities" | "business";
-export type Weekday = "sat" | "sun" | "mon" | "tue" | "wed" | "thu" | "fri";
+export type ClassLevel = "9" | "10";
 
 export type StudyPlan = {
-  examName: string;
-  examDate: string;
-  goal: string;
+  name: string;
+  classLevel: ClassLevel;
   curriculumTrack: CurriculumTrack;
-  subjectGroup: SubjectGroup;
+  goal: string;
+  weakSubjects: string[];
   dailyMinutes: number;
-  studyDays: Weekday[];
+  examDate: string;
 };
 
 export const defaultStudyPlan: StudyPlan = {
-  examName: "",
-  examDate: "",
-  goal: "",
+  name: "",
+  classLevel: "9",
   curriculumTrack: "bangla",
-  subjectGroup: "science",
+  goal: "",
+  weakSubjects: [],
   dailyMinutes: 60,
-  studyDays: ["sat", "sun", "mon", "tue", "wed"],
+  examDate: "",
 };
+
+export const classLevelOptions: { value: ClassLevel; label: { en: string; bn: string } }[] = [
+  { value: "9", label: { en: "Class 9", bn: "নবম শ্রেণি" } },
+  { value: "10", label: { en: "Class 10", bn: "দশম শ্রেণি" } },
+];
 
 export const curriculumTrackOptions: { value: CurriculumTrack; label: { en: string; bn: string } }[] = [
   { value: "bangla", label: { en: "Bangla version", bn: "বাংলা ভার্সন" } },
   { value: "english", label: { en: "English version", bn: "ইংরেজি ভার্সন" } },
 ];
 
-export const subjectGroupOptions: { value: SubjectGroup; label: { en: string; bn: string } }[] = [
-  { value: "science", label: { en: "Science", bn: "বিজ্ঞান" } },
-  { value: "humanities", label: { en: "Humanities", bn: "মানবিক" } },
-  { value: "business", label: { en: "Business Studies", bn: "ব্যবসায় শিক্ষা" } },
-];
-
-export const weekdayOptions: { value: Weekday; label: { en: string; bn: string } }[] = [
-  { value: "sat", label: { en: "Sat", bn: "শনি" } },
-  { value: "sun", label: { en: "Sun", bn: "রবি" } },
-  { value: "mon", label: { en: "Mon", bn: "সোম" } },
-  { value: "tue", label: { en: "Tue", bn: "মঙ্গল" } },
-  { value: "wed", label: { en: "Wed", bn: "বুধ" } },
-  { value: "thu", label: { en: "Thu", bn: "বৃহঃ" } },
-  { value: "fri", label: { en: "Fri", bn: "শুক্র" } },
+export const dailyMinutesOptions: { value: number; label: { en: string; bn: string } }[] = [
+  { value: 30, label: { en: "30 min", bn: "৩০ মিনিট" } },
+  { value: 60, label: { en: "1 hour", bn: "১ ঘণ্টা" } },
+  { value: 90, label: { en: "1.5 hours", bn: "দেড় ঘণ্টা" } },
+  { value: 120, label: { en: "2 hours", bn: "২ ঘণ্টা" } },
+  { value: 180, label: { en: "3+ hours", bn: "৩+ ঘণ্টা" } },
 ];
 
 export function daysUntil(dateStr: string): number | null {
