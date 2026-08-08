@@ -1,4 +1,4 @@
-export type ChapterStatus = "mastered" | "in-progress" | "not-started";
+export type ChapterStatus = "mastered" | "in-progress" | "needs-revision" | "not-started";
 
 export type Chapter = {
   id: string;
@@ -66,7 +66,7 @@ export const subjects: Subject[] = [
       {
         id: "ch-3",
         name: { en: "Periodic Table", bn: "পর্যায় সারণি" },
-        status: "mastered",
+        status: "needs-revision",
         progress: 100,
         estimatedMinutes: 30,
       },
@@ -112,10 +112,17 @@ export const subjects: Subject[] = [
   },
 ];
 
+// A chapter counts toward completion once it's been learned, even if it's
+// since been flagged for revision — "needs revision" is a reminder overlay,
+// not unfinished work.
+export function isChapterComplete(status: ChapterStatus): boolean {
+  return status === "mastered" || status === "needs-revision";
+}
+
 export function getSubjectProgress(subject: Subject): number {
   if (subject.chapters.length === 0) return subject.progress;
-  const masteredCount = subject.chapters.filter((c) => c.status === "mastered").length;
-  return Math.round((masteredCount / subject.chapters.length) * 100);
+  const completedCount = subject.chapters.filter((c) => isChapterComplete(c.status)).length;
+  return Math.round((completedCount / subject.chapters.length) * 100);
 }
 
 export function getSubjectTotalChapters(subject: Subject): number {
@@ -124,9 +131,19 @@ export function getSubjectTotalChapters(subject: Subject): number {
 
 export function getSubjectChaptersCompleted(subject: Subject): number {
   if (subject.chapters.length > 0) {
-    return subject.chapters.filter((c) => c.status === "mastered").length;
+    return subject.chapters.filter((c) => isChapterComplete(c.status)).length;
   }
   return Math.round((getSubjectProgress(subject) / 100) * subject.totalChapters);
+}
+
+/** The single chapter within this subject most worth studying next — finish what's started, then revise, then begin new material. */
+export function getChapterRecommendation(subject: Subject): Chapter | null {
+  return (
+    subject.chapters.find((c) => c.status === "in-progress") ??
+    subject.chapters.find((c) => c.status === "needs-revision") ??
+    subject.chapters.find((c) => c.status === "not-started") ??
+    null
+  );
 }
 
 const bengaliDigits = ["০", "১", "২", "৩", "৪", "৫", "৬", "৭", "৮", "৯"];
@@ -140,7 +157,7 @@ export function toBengaliDigits(n: number): string {
 
 export function getSubjectNextChapterLabel(subject: Subject, lang: "en" | "bn"): string | null {
   if (subject.chapters.length > 0) {
-    const next = subject.chapters.find((c) => c.status !== "mastered");
+    const next = getChapterRecommendation(subject);
     return next ? next.name[lang] : null;
   }
   const completed = getSubjectChaptersCompleted(subject);
@@ -187,6 +204,20 @@ export function getNextRecommendedChapter(subjects: Subject[]): RecommendedChapt
       subjectName: notStarted.subject.name,
       chapter: notStarted.chapter,
     };
+  }
+  return null;
+}
+
+export type ActiveChapter = {
+  subject: Subject;
+  chapter: Chapter;
+};
+
+/** The chapter the student is genuinely mid-way through right now, if any. */
+export function getActiveChapter(subjects: Subject[]): ActiveChapter | null {
+  for (const subject of subjects) {
+    const chapter = subject.chapters.find((c) => c.status === "in-progress");
+    if (chapter) return { subject, chapter };
   }
   return null;
 }

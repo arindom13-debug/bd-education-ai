@@ -11,6 +11,8 @@ import {
   Flame,
   Clock,
   Check,
+  RotateCcw,
+  Sparkles,
   BookOpenCheck,
 } from "lucide-react";
 import { AnimatedProgressBar } from "@/components/animated-progress-bar";
@@ -22,6 +24,8 @@ import { strings, type Lang } from "@/lib/i18n";
 import {
   getSubjectProgress,
   getNextRecommendedChapter,
+  getChapterRecommendation,
+  isChapterComplete,
   streakDays,
   type Subject,
   type Chapter,
@@ -79,7 +83,7 @@ export function StudyView({
       const subject = subjects.find((s) => s.id === subjectId);
       const willCompleteSubject =
         subject !== undefined &&
-        subject.chapters.every((c) => c.id === chapter.id || c.status === "mastered");
+        subject.chapters.every((c) => c.id === chapter.id || isChapterComplete(c.status));
       if (willCompleteSubject) {
         setJustCompletedSubjectId(subjectId);
         playSuccessChime();
@@ -132,7 +136,7 @@ export function StudyView({
         </p>
         <button
           onClick={onStartSession}
-          className="mt-3 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-transform active:scale-95"
+          className="mt-3 rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground transition-transform active:scale-95"
         >
           {strings.startSession[lang]}
         </button>
@@ -275,40 +279,84 @@ export function StudyView({
                       </div>
                     ) : (
                       <div className="flex flex-col gap-0.5 pb-2">
-                        {subject.chapters.map((chapter) => (
-                          <div
-                            key={chapter.id}
-                            className="flex items-center gap-2.5 rounded-md px-1.5 py-2 hover:bg-surface-muted"
-                          >
-                            <button
-                              onClick={() => handleToggleChapter(subject.id, chapter)}
-                              aria-label="Toggle chapter complete"
-                              className={`flex size-5 shrink-0 items-center justify-center rounded-full border transition-transform active:scale-90 ${
-                                chapter.status === "mastered"
-                                  ? "border-success bg-success text-white"
-                                  : "border-border text-transparent"
-                              } ${justCompletedId === chapter.id ? "animate-[pop-in_450ms_ease-out]" : ""}`}
-                            >
-                              <Check size={12} strokeWidth={3} />
-                            </button>
-                            <div className="min-w-0 flex-1">
-                              <p
-                                className={`truncate text-sm ${
-                                  chapter.status === "mastered"
-                                    ? "text-foreground-muted line-through"
-                                    : ""
+                        {(() => {
+                          const recommendedId = getChapterRecommendation(subject)?.id ?? null;
+                          return subject.chapters.map((chapter) => {
+                            const isRecommended = chapter.id === recommendedId;
+                            return (
+                              <div
+                                key={chapter.id}
+                                className={`flex items-center gap-2.5 rounded-md px-1.5 py-2 transition-colors duration-150 hover:bg-surface-muted ${
+                                  isRecommended ? "bg-accent-soft/40 ring-1 ring-accent/30" : ""
                                 }`}
                               >
-                                {chapter.name[lang]}
-                              </p>
-                              <AnimatedProgressBar value={chapter.progress} height="h-1" className="mt-1.5" />
-                            </div>
-                            <span className="flex shrink-0 items-center gap-1 text-xs text-foreground-muted">
-                              <Clock size={11} strokeWidth={1.75} />
-                              {chapter.estimatedMinutes ?? 20} {strings.minutesShort[lang]}
-                            </span>
-                          </div>
-                        ))}
+                                <button
+                                  onClick={() => handleToggleChapter(subject.id, chapter)}
+                                  aria-label="Toggle chapter complete"
+                                  className={`flex size-5 shrink-0 items-center justify-center rounded-full border transition-transform active:scale-90 ${
+                                    chapter.status === "mastered"
+                                      ? "border-success bg-success text-white"
+                                      : chapter.status === "needs-revision"
+                                      ? "border-warning bg-warning/15 text-warning"
+                                      : chapter.status === "in-progress"
+                                      ? "border-accent text-transparent"
+                                      : "border-border text-transparent"
+                                  } ${justCompletedId === chapter.id ? "animate-[pop-in_450ms_ease-out]" : ""}`}
+                                >
+                                  {chapter.status === "needs-revision" ? (
+                                    <RotateCcw size={11} strokeWidth={2.5} />
+                                  ) : (
+                                    <Check size={12} strokeWidth={3} />
+                                  )}
+                                </button>
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-1.5">
+                                    <p
+                                      className={`truncate text-sm ${
+                                        chapter.status === "mastered"
+                                          ? "text-foreground-muted line-through"
+                                          : ""
+                                      }`}
+                                    >
+                                      {chapter.name[lang]}
+                                    </p>
+                                    {isRecommended && (
+                                      <span className="flex shrink-0 items-center gap-0.5 text-[9px] font-medium uppercase tracking-wide text-accent">
+                                        <Sparkles size={9} strokeWidth={2} />
+                                        {strings.recommendedLabel[lang]}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="mt-1.5 flex items-center gap-2">
+                                    <AnimatedProgressBar value={chapter.progress} height="h-1" className="flex-1" />
+                                    <span className="flex shrink-0 items-center gap-1 text-[10px] text-foreground-muted">
+                                      <Clock size={10} strokeWidth={1.75} />
+                                      {chapter.estimatedMinutes ?? 20} {strings.minutesShort[lang]}
+                                    </span>
+                                  </div>
+                                </div>
+                                {chapter.status !== "mastered" && (
+                                  <button
+                                    onClick={() => onNavigate("chat")}
+                                    className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-medium transition-colors duration-150 ${
+                                      chapter.status === "in-progress"
+                                        ? "bg-accent-soft text-accent hover:bg-accent hover:text-accent-foreground"
+                                        : chapter.status === "needs-revision"
+                                        ? "bg-warning/15 text-warning hover:bg-warning hover:text-white"
+                                        : "bg-surface-muted text-foreground-muted hover:bg-border hover:text-foreground"
+                                    }`}
+                                  >
+                                    {chapter.status === "in-progress"
+                                      ? strings.continueBtn[lang]
+                                      : chapter.status === "needs-revision"
+                                      ? strings.reviseBtn[lang]
+                                      : strings.startTopicBtn[lang]}
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          });
+                        })()}
                       </div>
                     )}
 

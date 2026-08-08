@@ -21,12 +21,13 @@ import { chatHistory } from "@/lib/chat-data";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ProfilePanel } from "@/components/profile-panel";
 import { Tooltip } from "@/components/tooltip";
-import { daysUntil, curriculumTrackOptions, type StudyPlan } from "@/lib/study-plan";
+import type { StudyPlan } from "@/lib/study-plan";
+import type { ChatLanguage } from "@/lib/chat-language";
 
 export type CanvasView = "chat" | "progress" | "study" | "setup" | "tools" | "examMode" | "panicRevision";
 
 const EXAM_COLOR = "#4F7CFF";
-const PANIC_COLOR = "#F59E0B";
+const PANIC_COLOR = "#F97316";
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 export function BrandMark({ size = 24 }: { size?: number }) {
@@ -86,6 +87,8 @@ export function Sidebar({
   studentName,
   studentClassLabel,
   plan,
+  chatLanguage,
+  onChangeChatLanguage,
 }: {
   lang: Lang;
   onToggleLang: () => void;
@@ -99,6 +102,8 @@ export function Sidebar({
   studentName: string;
   studentClassLabel: string;
   plan: StudyPlan;
+  chatLanguage: ChatLanguage;
+  onChangeChatLanguage: (value: ChatLanguage) => void;
 }) {
   const groups: { key: "today" | "yesterday"; label: string }[] = [
     { key: "today", label: strings.today[lang] },
@@ -107,8 +112,6 @@ export function Sidebar({
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-  const boardLabel = curriculumTrackOptions.find((o) => o.value === plan.curriculumTrack)?.label[lang] ?? "";
-  const examDaysLeft = daysUntil(plan.examDate);
   const layoutGroup = onCollapse ? "desktop" : "mobile";
 
   useEffect(() => {
@@ -264,10 +267,9 @@ export function Sidebar({
               lang={lang}
               studentName={studentName}
               studentClassLabel={studentClassLabel}
-              boardLabel={boardLabel}
-              studyGoal={plan.goal}
-              examDaysLeft={examDaysLeft}
-              onToggleLang={onToggleLang}
+              plan={plan}
+              chatLanguage={chatLanguage}
+              onChangeChatLanguage={onChangeChatLanguage}
               onOpenSettings={() => onSelectView("setup")}
               onClose={() => setMenuOpen(false)}
             />

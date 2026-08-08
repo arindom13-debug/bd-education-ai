@@ -49,6 +49,14 @@ body {
   font-family: var(--font-sans);
 }
 
+/* A single, consistent keyboard-focus indicator for every interactive
+   element in the app — some components remove the native outline for
+   mouse/touch users without providing a replacement for keyboard users. */
+:focus-visible {
+  outline: 2px solid var(--color-accent) !important;
+  outline-offset: 2px;
+}
+
 @keyframes step-in-forward {
   from {
     opacity: 0;
@@ -83,5 +91,18 @@ body {
   100% {
     opacity: 1;
     transform: scale(1);
+  }
+}
+
+/* Respect the OS-level reduced-motion preference for anything not already
+   covered by Framer Motion's MotionConfig (plain CSS transitions/keyframes). */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

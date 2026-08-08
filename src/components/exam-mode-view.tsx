@@ -1,9 +1,9 @@
 "use client";
 
+import { motion } from "framer-motion";
 import {
   ArrowLeft,
   GraduationCap,
-  Clock,
   Sparkles,
   Target,
   MessageSquare,
@@ -14,12 +14,24 @@ import {
 } from "lucide-react";
 import { ModeTimer } from "@/components/mode-timer";
 import { EmptyState } from "@/components/empty-state";
+import { CircularProgress } from "@/components/circular-progress";
 import type { CanvasView } from "@/components/sidebar";
 import { strings, type Lang } from "@/lib/i18n";
-import { getNextRecommendedChapter, getSubjectRemainingMinutes, type Subject } from "@/lib/curriculum-data";
+import {
+  getNextRecommendedChapter,
+  getSubjectProgress,
+  getSubjectNextChapterLabel,
+  getSubjectChaptersCompleted,
+  getSubjectTotalChapters,
+  type Subject,
+} from "@/lib/curriculum-data";
 import { daysUntil, type StudyPlan } from "@/lib/study-plan";
 
+const EASE = [0.16, 1, 0.3, 1] as const;
 const EXAM_COLOR = "#4F7CFF";
+
+// Placeholder until exams have their own record with a real name — swap this out later.
+const EXAM_NAME = { en: "SSC Examination", bn: "এসএসসি পরীক্ষা" };
 
 const timerPresets = [
   { minutes: 25, label: { en: "Focus", bn: "ফোকাস" } },
@@ -33,10 +45,14 @@ const revisionSteps = [
   { en: "Skim through the Behaviour of Gases summary", bn: "গ্যাসের আচরণের সারাংশ দ্রুত দেখে নাও" },
 ];
 
-function formatMinutes(total: number, lang: Lang): string {
-  if (total < 60) return `${total} ${strings.minutesShort[lang]}`;
-  const hours = Math.round(total / 60);
-  return `${hours} ${strings.hoursShort[lang]}`;
+function formatExamDate(dateStr: string, lang: Lang): string {
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat(lang === "en" ? "en-US" : "bn-BD", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
 }
 
 export function ExamModeView({
@@ -52,15 +68,20 @@ export function ExamModeView({
 }) {
   const remainingDays = daysUntil(plan.examDate);
   const recommended = getNextRecommendedChapter(subjects);
-  const weakSubjects = subjects.filter((s) => plan.weakSubjects.includes(s.id));
-  const totalMinutesLeft = subjects.reduce((sum, s) => sum + getSubjectRemainingMinutes(s), 0);
+  const weakSubjects = [...subjects]
+    .filter((s) => plan.weakSubjects.includes(s.id))
+    .sort((a, b) => getSubjectProgress(a) - getSubjectProgress(b));
+
+  const overallReadiness =
+    subjects.length === 0
+      ? 0
+      : Math.round(subjects.reduce((sum, s) => sum + getSubjectProgress(s), 0) / subjects.length);
+  const chaptersMastered = subjects.reduce((sum, s) => sum + getSubjectChaptersCompleted(s), 0);
+  const chaptersTotal = subjects.reduce((sum, s) => sum + getSubjectTotalChapters(s), 0);
 
   return (
-    <div
-      className="p-5 sm:p-8"
-      style={{ background: `radial-gradient(circle at top, ${EXAM_COLOR}14, transparent 55%)` }}
-    >
-      <div className="mx-auto flex max-w-2xl flex-col gap-7">
+    <div className="p-5 sm:p-8">
+      <div className="mx-auto flex max-w-2xl flex-col gap-6">
         <button
           onClick={() => onNavigate("chat")}
           className="flex w-fit items-center gap-1.5 text-xs font-medium text-foreground-muted hover:text-foreground"
@@ -80,20 +101,43 @@ export function ExamModeView({
           <p className="text-sm text-foreground-muted">{strings.examModeTagline[lang]}</p>
         </div>
 
-        {/* Exam Countdown */}
-        <div
+        {/* Tier 1 — exam identity, live countdown, single primary action */}
+        <motion.div
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: EASE }}
           className="flex flex-col items-center gap-1 rounded-2xl border p-8 text-center"
           style={{ borderColor: `${EXAM_COLOR}33` }}
         >
-          <p className="text-xs font-medium uppercase tracking-wide" style={{ color: EXAM_COLOR }}>
+          <p className="text-sm font-medium" style={{ color: EXAM_COLOR }}>
+            {EXAM_NAME[lang]}
+          </p>
+          {remainingDays !== null && (
+            <p className="text-xs text-foreground-muted">{formatExamDate(plan.examDate, lang)}</p>
+          )}
+          <p className="mt-4 text-xs font-medium uppercase tracking-wide" style={{ color: EXAM_COLOR }}>
             {strings.examCountdown[lang]}
           </p>
           {remainingDays !== null ? (
             <>
-              <p className="text-6xl font-bold tabular-nums tracking-tight" style={{ color: EXAM_COLOR }}>
+              <motion.p
+                key={remainingDays}
+                initial={{ opacity: 0, scale: 0.92 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.25, ease: EASE }}
+                className="text-6xl font-bold tabular-nums tracking-tight"
+                style={{ color: EXAM_COLOR }}
+              >
                 {Math.max(remainingDays, 0)}
-              </p>
+              </motion.p>
               <p className="text-sm text-foreground-muted">{strings.daysLeft[lang]}</p>
+              <button
+                onClick={() => onNavigate("chat")}
+                style={{ backgroundColor: EXAM_COLOR }}
+                className="mt-5 rounded-lg px-6 py-3 text-sm font-semibold text-white transition-transform active:scale-95"
+              >
+                {strings.startRevisionBtn[lang]}
+              </button>
             </>
           ) : (
             <div className="mt-2">
@@ -107,67 +151,25 @@ export function ExamModeView({
               />
             </div>
           )}
-        </div>
+        </motion.div>
 
-        {/* Today's Priority */}
-        {recommended && (
-          <div className="rounded-2xl border border-border bg-surface p-5">
-            <p className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
-              {strings.todaysPriority[lang]}
+        {/* Tier 2 — glanceable readiness stats */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="flex flex-col items-center gap-2 rounded-2xl border border-border bg-surface p-4">
+            <CircularProgress value={overallReadiness} size={56} strokeWidth={5} />
+            <p className="text-center text-xs text-foreground-muted">
+              {strings.syllabusReadinessLabel[lang]}
             </p>
-            <p className="mt-1.5 text-base font-medium">{recommended.chapter.name[lang]}</p>
-            <p className="text-sm text-foreground-muted">
-              {recommended.subjectName[lang]} • {recommended.chapter.estimatedMinutes ?? 20}{" "}
-              {strings.minutesShort[lang]}
-            </p>
-            <button
-              onClick={() => onNavigate("chat")}
-              style={{ backgroundColor: EXAM_COLOR }}
-              className="mt-3 rounded-lg px-4 py-2 text-sm font-medium text-white transition-transform active:scale-95"
-            >
-              {strings.startStudyingBtn[lang]}
-            </button>
           </div>
-        )}
-
-        {/* Time Remaining */}
-        <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-5">
-          <div
-            className="flex size-10 shrink-0 items-center justify-center rounded-xl"
-            style={{ backgroundColor: `${EXAM_COLOR}1f`, color: EXAM_COLOR }}
-          >
-            <Clock size={18} strokeWidth={1.75} />
-          </div>
-          <div>
-            <p className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
-              {strings.timeRemaining[lang]}
+          <div className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-border bg-surface p-4 text-center">
+            <p className="text-2xl font-semibold tabular-nums" style={{ color: EXAM_COLOR }}>
+              {chaptersMastered}/{chaptersTotal}
             </p>
-            <p className="text-base font-medium">{formatMinutes(totalMinutesLeft, lang)}</p>
+            <p className="text-xs text-foreground-muted">{strings.topicsMasteredLabel[lang]}</p>
           </div>
         </div>
 
-        {/* AI Revision Plan */}
-        <div className="rounded-2xl border border-border bg-surface p-5">
-          <p className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">
-            <Sparkles size={13} strokeWidth={1.75} />
-            {strings.aiRevisionPlan[lang]}
-          </p>
-          <div className="flex flex-col gap-2.5">
-            {revisionSteps.map((step, i) => (
-              <div key={i} className="flex items-center gap-3 text-sm">
-                <span
-                  className="flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-medium"
-                  style={{ backgroundColor: `${EXAM_COLOR}1f`, color: EXAM_COLOR }}
-                >
-                  {i + 1}
-                </span>
-                {step[lang]}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Weak Topics */}
+        {/* Tier 3 — what needs attention, in priority order */}
         <div className="rounded-2xl border border-border bg-surface p-5">
           <p className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">
             <Target size={13} strokeWidth={1.75} />
@@ -184,56 +186,89 @@ export function ExamModeView({
               compact
             />
           ) : (
-            <div className="flex flex-wrap gap-1.5">
-              {weakSubjects.map((s) => (
-                <span
-                  key={s.id}
-                  className="rounded-full px-3 py-1 text-xs font-medium"
-                  style={{ backgroundColor: `${EXAM_COLOR}1f`, color: EXAM_COLOR }}
-                >
-                  {s.name[lang]}
-                </span>
-              ))}
+            <div className="flex flex-col gap-2">
+              {weakSubjects.map((s, i) => {
+                const topic = getSubjectNextChapterLabel(s, lang);
+                return (
+                  <div
+                    key={s.id}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2"
+                    style={{ backgroundColor: `${EXAM_COLOR}0d` }}
+                  >
+                    <span
+                      className="flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white"
+                      style={{ backgroundColor: EXAM_COLOR }}
+                    >
+                      {i + 1}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">{s.name[lang]}</p>
+                      {topic && <p className="truncate text-xs text-foreground-muted">{topic}</p>}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
 
-        {/* Timer */}
+        {/* Tier 3 — the recommended revision session */}
         <div className="rounded-2xl border border-border bg-surface p-5">
+          <p className="mb-3 flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">
+            <Sparkles size={13} strokeWidth={1.75} />
+            {strings.aiRevisionPlan[lang]}
+          </p>
+          {recommended && (
+            <p className="mb-3 text-sm">
+              <span className="font-medium">{recommended.chapter.name[lang]}</span>{" "}
+              <span className="text-foreground-muted">
+                — {recommended.subjectName[lang]} · {recommended.chapter.estimatedMinutes ?? 20}{" "}
+                {strings.minutesShort[lang]}
+              </span>
+            </p>
+          )}
+          <div className="flex flex-col gap-2.5">
+            {revisionSteps.map((step, i) => (
+              <div key={i} className="flex items-center gap-3 text-sm">
+                <span
+                  className="flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-medium"
+                  style={{ backgroundColor: `${EXAM_COLOR}1f`, color: EXAM_COLOR }}
+                >
+                  {i + 1}
+                </span>
+                {step[lang]}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Tier 4 — supporting tools, deliberately quieter */}
+        <div className="rounded-xl border border-border p-4">
           <ModeTimer lang={lang} presets={timerPresets} color={EXAM_COLOR} />
         </div>
 
-        {/* Quick Start */}
-        <div>
-          <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">
-            {strings.quickStart[lang]}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => onNavigate("chat")}
-              style={{ borderColor: `${EXAM_COLOR}55`, color: EXAM_COLOR }}
-              className="flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-transform active:scale-95"
-            >
-              <MessageSquare size={14} strokeWidth={1.75} />
-              {strings.chat[lang]}
-            </button>
-            <button
-              onClick={() => onNavigate("study")}
-              style={{ borderColor: `${EXAM_COLOR}55`, color: EXAM_COLOR }}
-              className="flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-transform active:scale-95"
-            >
-              <BookOpen size={14} strokeWidth={1.75} />
-              {strings.studyPlan[lang]}
-            </button>
-            <button
-              onClick={() => onNavigate("tools")}
-              style={{ borderColor: `${EXAM_COLOR}55`, color: EXAM_COLOR }}
-              className="flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-medium transition-transform active:scale-95"
-            >
-              <Wrench size={14} strokeWidth={1.75} />
-              {strings.toolsNav[lang]}
-            </button>
-          </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => onNavigate("chat")}
+            className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-sm text-foreground-muted transition-colors duration-150 hover:text-foreground"
+          >
+            <MessageSquare size={14} strokeWidth={1.75} />
+            {strings.chat[lang]}
+          </button>
+          <button
+            onClick={() => onNavigate("study")}
+            className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-sm text-foreground-muted transition-colors duration-150 hover:text-foreground"
+          >
+            <BookOpen size={14} strokeWidth={1.75} />
+            {strings.studyPlan[lang]}
+          </button>
+          <button
+            onClick={() => onNavigate("tools")}
+            className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-sm text-foreground-muted transition-colors duration-150 hover:text-foreground"
+          >
+            <Wrench size={14} strokeWidth={1.75} />
+            {strings.toolsNav[lang]}
+          </button>
         </div>
       </div>
     </div>

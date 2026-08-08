@@ -1,11 +1,20 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import { ArrowUp, Sparkles } from "lucide-react";
 import { strings, type Lang } from "@/lib/i18n";
-import { subjects } from "@/lib/curriculum-data";
+import { subjects as allSubjects, streakDays, type Subject } from "@/lib/curriculum-data";
+import { placeholderYesterdayMinutes } from "@/lib/daily-briefing";
+import type { StudyPlan } from "@/lib/study-plan";
+import { getDemoReplyText, type ChatLanguage } from "@/lib/chat-language";
 import type { ChatMessage, ChatThread } from "@/lib/chat-data";
 import { TypingDots } from "@/components/typing-dots";
+import { DailyBriefing } from "@/components/daily-briefing";
+import { ContinueLearningCard } from "@/components/continue-learning-card";
+import { AiRecommendationStrip } from "@/components/ai-recommendation-strip";
+import { RecentChatsSection } from "@/components/recent-chats-section";
+import { SubjectWorkspace } from "@/components/subject-workspace";
 
 function Bubble({ message, lang }: { message: ChatMessage; lang: Lang }) {
   const isUser = message.role === "user";
@@ -39,11 +48,29 @@ function Bubble({ message, lang }: { message: ChatMessage; lang: Lang }) {
   );
 }
 
-export function ChatView({ lang, activeChat }: { lang: Lang; activeChat: ChatThread | null }) {
+export function ChatView({
+  lang,
+  activeChat,
+  plan,
+  subjects,
+  chatLanguage,
+  onStartSession,
+  onOpenChat,
+}: {
+  lang: Lang;
+  activeChat: ChatThread | null;
+  plan: StudyPlan;
+  subjects: Subject[];
+  chatLanguage: ChatLanguage;
+  onStartSession: () => void;
+  onOpenChat: (id: string) => void;
+}) {
   const [messages, setMessages] = useState<ChatMessage[]>(activeChat?.messages ?? []);
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const selectedSubject = subjects.find((s) => s.id === selectedSubjectId) ?? null;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -57,16 +84,8 @@ export function ChatView({ lang, activeChat }: { lang: Lang; activeChat: ChatThr
     setIsTyping(true);
     setTimeout(() => {
       setIsTyping(false);
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "ai",
-          text: {
-            en: "This is a demo reply. Real answers grounded in your textbooks are coming in a later step.",
-            bn: "এটি একটি ডেমো উত্তর। তোমার পাঠ্যবইয়ের ভিত্তিতে প্রকৃত উত্তর পরবর্তী ধাপে আসবে।",
-          },
-        },
-      ]);
+      const reply = getDemoReplyText(chatLanguage);
+      setMessages((prev) => [...prev, { role: "ai", text: { en: reply, bn: reply } }]);
     }, 700);
   };
 
@@ -99,6 +118,23 @@ export function ChatView({ lang, activeChat }: { lang: Lang; activeChat: ChatThr
   if (messages.length === 0) {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-8 p-6">
+        <DailyBriefing
+          lang={lang}
+          studentName={plan.name.trim()}
+          examDate={plan.examDate}
+          streakDays={streakDays}
+          yesterdayMinutes={placeholderYesterdayMinutes}
+          subjects={subjects}
+          weakSubjectIds={plan.weakSubjects}
+          onStartStudying={onStartSession}
+        />
+        <ContinueLearningCard lang={lang} subjects={subjects} onContinue={onStartSession} />
+        <AiRecommendationStrip
+          lang={lang}
+          subjects={subjects}
+          streakDays={streakDays}
+          onAction={onStartSession}
+        />
         <div className="flex flex-col items-center gap-4 text-center">
           <div className="flex size-12 items-center justify-center rounded-2xl bg-accent-soft text-accent">
             <Sparkles size={24} strokeWidth={1.75} />
@@ -113,17 +149,55 @@ export function ChatView({ lang, activeChat }: { lang: Lang; activeChat: ChatThr
           </div>
         </div>
         {composer}
-        <div className="flex max-w-2xl flex-wrap justify-center gap-2">
-          {subjects.slice(0, 5).map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setInput(`${lang === "en" ? "Ask about" : "সম্পর্কে জিজ্ঞাসা করো"} ${s.name[lang]}`)}
-              className="rounded-full border border-border px-3 py-1.5 text-xs text-foreground-muted hover:border-accent hover:text-foreground"
-            >
-              {s.name[lang]}
-            </button>
-          ))}
+        <div className="flex w-full max-w-2xl flex-col items-center">
+          <div className="flex flex-wrap justify-center gap-2">
+            {allSubjects.slice(0, 5).map((s) => {
+              const isSelected = selectedSubjectId === s.id;
+              return (
+                <button
+                  key={s.id}
+                  onClick={() => setSelectedSubjectId((id) => (id === s.id ? null : s.id))}
+                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
+                    isSelected
+                      ? "border-accent bg-accent-soft text-accent"
+                      : "border-border text-foreground-muted hover:border-accent hover:text-foreground"
+                  }`}
+                >
+                  {s.name[lang]}
+                </button>
+              );
+            })}
+          </div>
+          <AnimatePresence>
+            {selectedSubject && (
+              <SubjectWorkspace
+                key={selectedSubject.id}
+                lang={lang}
+                subject={selectedSubject}
+                onAskAi={() =>
+                  setInput(
+                    `${lang === "en" ? "Ask about" : "সম্পর্কে জিজ্ঞাসা করো"} ${selectedSubject.name[lang]}`
+                  )
+                }
+                onPractice={() =>
+                  setInput(
+                    lang === "en"
+                      ? `Give me practice questions on ${selectedSubject.name.en}`
+                      : `${selectedSubject.name.bn} বিষয়ে অনুশীলন প্রশ্ন দাও`
+                  )
+                }
+                onRevise={() =>
+                  setInput(
+                    lang === "en"
+                      ? `Help me revise ${selectedSubject.name.en}`
+                      : `${selectedSubject.name.bn} রিভিশন করতে সাহায্য করো`
+                  )
+                }
+              />
+            )}
+          </AnimatePresence>
         </div>
+        <RecentChatsSection lang={lang} onOpenChat={onOpenChat} />
       </div>
     );
   }

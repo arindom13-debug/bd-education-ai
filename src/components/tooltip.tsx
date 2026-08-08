@@ -52,7 +52,7 @@ export function Tooltip({
             initial={{ opacity: 0, scale: 0.94 }}
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.96 }}
-            transition={{ duration: 0.12, ease: EASE }}
+            transition={{ duration: 0.15, ease: EASE }}
             className={`pointer-events-none absolute z-50 whitespace-nowrap rounded-md border border-border bg-surface px-2 py-1 text-[11px] font-medium text-foreground shadow-md ${POSITION_CLASS[side]}`}
           >
             {label}

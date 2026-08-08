@@ -38,12 +38,12 @@ export function Modal({
         transition={{ duration: 0.2, ease: EASE }}
         className="relative flex max-h-[85vh] w-full max-w-lg flex-col rounded-2xl border border-border bg-surface shadow-lg"
       >
-        <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-4">
-          <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-5 py-4">
+          <h2 className="min-w-0 truncate text-base font-semibold tracking-tight">{title}</h2>
           <button
             onClick={onClose}
             aria-label="Close"
-            className="rounded-md p-1 text-foreground-muted transition-colors duration-150 hover:bg-surface-muted hover:text-foreground"
+            className="shrink-0 rounded-md p-1 text-foreground-muted transition-colors duration-150 hover:bg-surface-muted hover:text-foreground"
           >
             <X size={18} strokeWidth={1.75} />
           </button>

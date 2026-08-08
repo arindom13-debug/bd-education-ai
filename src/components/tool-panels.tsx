@@ -1,25 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  Play,
-  Pause,
-  RotateCcw,
-  Plus,
-  Sparkles,
-  NotebookText,
-  AlertTriangle,
-  FileCheck2,
-  Check,
-  type LucideIcon,
-} from "lucide-react";
+import { Play, Pause, RotateCcw, Plus, Sparkles, FileCheck2, Check } from "lucide-react";
 import { strings, type Lang } from "@/lib/i18n";
 import {
   notebookEntries,
   aiNotebookEntries,
   mistakeBookEntries,
   savedAnswers,
-  vaultFolders,
   roadmapWeeks,
   timerPresets,
   alarmSounds,
@@ -140,7 +128,7 @@ export function NotebookPanel({ lang }: { lang: Lang }) {
         {notebookEntries.map((n, i) => (
           <div key={i} className="rounded-xl border border-border p-3.5">
             <div className="flex items-center justify-between gap-2">
-              <p className="text-sm font-medium">{n.title[lang]}</p>
+              <p className="min-w-0 flex-1 truncate text-sm font-medium">{n.title[lang]}</p>
               <span className="shrink-0 text-xs text-foreground-muted">{n.date[lang]}</span>
             </div>
             <p className="mt-1 text-xs text-foreground-muted">{n.snippet[lang]}</p>
@@ -213,27 +201,26 @@ export function SavedAnswersPanel({ lang }: { lang: Lang }) {
   );
 }
 
-export function StudyVaultPanel({ lang }: { lang: Lang }) {
-  const icons: Record<string, LucideIcon> = {
-    notebook: NotebookText,
-    mistakeBook: AlertTriangle,
-    savedAnswers: FileCheck2,
-  };
+export function MyLibraryPanel({ lang }: { lang: Lang }) {
+  const [tab, setTab] = useState<"aiNotebook" | "savedAnswers">("aiNotebook");
+  const tabClass = (active: boolean) =>
+    `flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
+      active ? "bg-accent-soft text-accent" : "text-foreground-muted hover:text-foreground"
+    }`;
+
   return (
-    <div className="grid grid-cols-2 gap-3">
-      {vaultFolders.map((f) => {
-        const Icon = icons[f.key];
-        return (
-          <div
-            key={f.key}
-            className="flex flex-col items-center gap-1.5 rounded-xl border border-border p-4 text-center"
-          >
-            <Icon size={20} strokeWidth={1.75} className="text-accent" />
-            <p className="text-lg font-semibold tabular-nums">{f.count}</p>
-            <p className="text-xs text-foreground-muted">{f.label[lang]}</p>
-          </div>
-        );
-      })}
+    <div className="flex flex-col gap-4">
+      <div className="flex gap-1 rounded-lg border border-border p-1">
+        <button onClick={() => setTab("aiNotebook")} className={tabClass(tab === "aiNotebook")}>
+          <Sparkles size={13} strokeWidth={1.75} />
+          {strings.aiNotebookTitle[lang]}
+        </button>
+        <button onClick={() => setTab("savedAnswers")} className={tabClass(tab === "savedAnswers")}>
+          <FileCheck2 size={13} strokeWidth={1.75} />
+          {strings.savedAnswersTitle[lang]}
+        </button>
+      </div>
+      {tab === "aiNotebook" ? <AiNotebookPanel lang={lang} /> : <SavedAnswersPanel lang={lang} />}
     </div>
   );
 }

@@ -4,11 +4,15 @@ export type ChatMessage = {
   source?: { en: string; bn: string };
 };
 
+export type ConversationContext = "learning" | "revision" | "practice";
+
 export type ChatThread = {
   id: string;
   title: { en: string; bn: string };
   group: "today" | "yesterday";
   subjectId: string;
+  context: ConversationContext;
+  relativeTime: { en: string; bn: string };
   messages: ChatMessage[];
 };
 
@@ -17,6 +21,8 @@ export const onboardingThread: ChatThread = {
   title: { en: "Get to know you", bn: "তোমাকে জানা" },
   group: "today",
   subjectId: "",
+  context: "learning",
+  relativeTime: { en: "Just now", bn: "এইমাত্র" },
   messages: [
     {
       role: "ai",
@@ -34,6 +40,8 @@ export const chatHistory: ChatThread[] = [
     title: { en: "Explain chemical reactions", bn: "রাসায়নিক বিক্রিয়া বোঝাও" },
     group: "today",
     subjectId: "chemistry",
+    context: "learning",
+    relativeTime: { en: "8 min ago", bn: "৮ মিনিট আগে" },
     messages: [
       {
         role: "user",
@@ -60,6 +68,8 @@ export const chatHistory: ChatThread[] = [
     title: { en: "Help with quadratic equations", bn: "দ্বিঘাত সমীকরণে সাহায্য" },
     group: "today",
     subjectId: "mathematics",
+    context: "practice",
+    relativeTime: { en: "2 hours ago", bn: "২ ঘণ্টা আগে" },
     messages: [
       {
         role: "user",
@@ -83,6 +93,8 @@ export const chatHistory: ChatThread[] = [
     title: { en: "SSC exam pattern for Physics", bn: "পদার্থবিজ্ঞানের এসএসসি প্রশ্নপত্র প্যাটার্ন" },
     group: "yesterday",
     subjectId: "physics",
+    context: "revision",
+    relativeTime: { en: "Yesterday, 7:40 PM", bn: "গতকাল, রাত ৭:৪০" },
     messages: [
       {
         role: "user",

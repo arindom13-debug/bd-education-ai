@@ -1,11 +1,4 @@
-export type ToolId =
-  | "timer"
-  | "notebook"
-  | "aiNotebook"
-  | "mistakeBook"
-  | "savedAnswers"
-  | "vault"
-  | "roadmap";
+export type ToolId = "timer" | "notebook" | "mistakeBook" | "library" | "roadmap";
 
 export const notebookEntries = [
   {
@@ -105,12 +98,6 @@ export const savedAnswers = [
     },
     source: { en: "NCTB Mathematics textbook, Ch. 3, p.41", bn: "এনসিটিবি গণিত বই, ৩য় অধ্যায়, পৃ.৪১" },
   },
-];
-
-export const vaultFolders = [
-  { key: "notebook" as const, label: { en: "Notes", bn: "নোট" }, count: 12 },
-  { key: "mistakeBook" as const, label: { en: "Mistakes", bn: "ভুল" }, count: 8 },
-  { key: "savedAnswers" as const, label: { en: "Saved answers", bn: "সংরক্ষিত উত্তর" }, count: 15 },
 ];
 
 export const roadmapWeeks = [

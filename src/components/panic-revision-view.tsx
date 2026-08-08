@@ -1,15 +1,18 @@
 "use client";
 
-import { ArrowLeft, Zap, ListOrdered, HelpCircle, Sparkles, CheckCircle2, CalendarClock } from "lucide-react";
+import { useEffect, useState } from "react";
+import { motion } from "framer-motion";
+import { ArrowLeft, Zap, HelpCircle, Sparkles, CheckCircle2, CalendarClock, Target, Clock } from "lucide-react";
 import { ModeTimer } from "@/components/mode-timer";
 import { EmptyState } from "@/components/empty-state";
 import type { CanvasView } from "@/components/sidebar";
 import { strings, type Lang } from "@/lib/i18n";
-import { getNextRecommendedChapter, type Subject } from "@/lib/curriculum-data";
-import { daysUntil, type StudyPlan } from "@/lib/study-plan";
+import { getSubjectProgress, getSubjectNextChapterLabel, type Subject } from "@/lib/curriculum-data";
+import { type StudyPlan } from "@/lib/study-plan";
 import { mostImportantQuestions, lastMinuteFacts } from "@/lib/tools-data";
 
-const PANIC_COLOR = "#F59E0B";
+const EASE = [0.16, 1, 0.3, 1] as const;
+const PANIC_COLOR = "#F97316";
 const PANIC_ON_COLOR = "#1f1300";
 
 const sessionPresets = [
@@ -17,6 +20,29 @@ const sessionPresets = [
   { minutes: 60, label: { en: "60 min", bn: "৬০ মিনিট" } },
   { minutes: 90, label: { en: "90 min", bn: "৯০ মিনিট" } },
 ];
+
+type ExactRemaining = { days: number; hours: number; minutes: number };
+
+function getExactRemaining(examDate: string): ExactRemaining | null {
+  if (!examDate) return null;
+  const target = new Date(examDate);
+  if (Number.isNaN(target.getTime())) return null;
+  target.setHours(23, 59, 59, 999);
+  const diffMs = target.getTime() - Date.now();
+  if (diffMs <= 0) return { days: 0, hours: 0, minutes: 0 };
+  const totalMinutes = Math.floor(diffMs / 60000);
+  return {
+    days: Math.floor(totalMinutes / (60 * 24)),
+    hours: Math.floor((totalMinutes % (60 * 24)) / 60),
+    minutes: totalMinutes % 60,
+  };
+}
+
+function formatStudyTime(totalMinutes: number, lang: Lang): string {
+  if (totalMinutes < 60) return `${totalMinutes} ${strings.minutesShort[lang]}`;
+  const hours = Math.round(totalMinutes / 60);
+  return `${hours} ${strings.hoursShort[lang]}`;
+}
 
 export function PanicRevisionView({
   lang,
@@ -29,22 +55,27 @@ export function PanicRevisionView({
   subjects: Subject[];
   onNavigate: (view: CanvasView) => void;
 }) {
-  const remainingDays = daysUntil(plan.examDate);
-  const hoursLeft = remainingDays !== null ? Math.max(remainingDays, 0) * 24 : null;
-  const weakSubjects = subjects.filter((s) => plan.weakSubjects.includes(s.id));
-  const priorityChapters = (weakSubjects.length > 0 ? weakSubjects : subjects.slice(0, 3))
-    .slice(0, 3)
-    .map((s) => {
-      const rec = getNextRecommendedChapter([s]);
-      return { subject: s, label: rec ? rec.chapter.name[lang] : s.name[lang] };
-    });
+  // A tick counter (not the value itself) drives re-renders so the countdown
+  // stays live — the actual remaining time is always derived fresh below.
+  const [, forceTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => forceTick((t) => t + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const remaining = getExactRemaining(plan.examDate);
+  const availableMinutes = remaining ? remaining.days * plan.dailyMinutes : 0;
+
+  // Priority tiers — a placeholder heuristic (weak-flag + progress) until real
+  // performance/exam-weightage data can drive this.
+  const mustKnow = subjects.filter((s) => plan.weakSubjects.includes(s.id));
+  const rest = subjects.filter((s) => !plan.weakSubjects.includes(s.id));
+  const shouldKnow = rest.filter((s) => getSubjectProgress(s) < 70);
+  const ifTimeAllows = rest.filter((s) => getSubjectProgress(s) >= 70);
 
   return (
-    <div
-      className="p-5 sm:p-8"
-      style={{ background: `linear-gradient(180deg, ${PANIC_COLOR}17, transparent 40%)` }}
-    >
-      <div className="mx-auto flex max-w-4xl flex-col gap-5">
+    <div className="p-5 sm:p-8">
+      <div className="mx-auto flex max-w-4xl flex-col gap-6">
         <button
           onClick={() => onNavigate("chat")}
           className="flex w-fit items-center gap-1.5 text-xs font-medium text-foreground-muted hover:text-foreground"
@@ -61,23 +92,50 @@ export function PanicRevisionView({
             <Zap size={24} strokeWidth={1.75} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">{strings.panicBtn[lang]}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">{strings.panicBtn[lang]}</h1>
             <p className="text-sm text-foreground-muted">{strings.panicPageTagline[lang]}</p>
           </div>
         </div>
 
-        {/* Hours left hero */}
+        {/* Tier 1 — exact countdown, available study time, one primary action */}
         <div
           className="rounded-2xl border p-6 text-center"
           style={{ borderColor: `${PANIC_COLOR}44`, backgroundColor: `${PANIC_COLOR}0d` }}
         >
           <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: PANIC_COLOR }}>
-            {strings.hoursLeftLabel[lang]}
+            {strings.timeRemainingLabel[lang]}
           </p>
-          {hoursLeft !== null ? (
-            <p className="text-6xl font-black tabular-nums tracking-tight" style={{ color: PANIC_COLOR }}>
-              {hoursLeft}
-            </p>
+          {remaining ? (
+            <>
+              <motion.div
+                key={`${remaining.days}-${remaining.hours}-${remaining.minutes}`}
+                initial={{ opacity: 0, scale: 0.94 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.25, ease: EASE }}
+                className="flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1 tabular-nums"
+                style={{ color: PANIC_COLOR }}
+              >
+                <span className="text-4xl font-bold tracking-tight sm:text-5xl">{remaining.days}</span>
+                <span className="text-sm font-semibold">{strings.daysShort[lang]}</span>
+                <span className="text-4xl font-bold tracking-tight sm:text-5xl">{remaining.hours}</span>
+                <span className="text-sm font-semibold">{strings.hoursShort[lang]}</span>
+                <span className="text-4xl font-bold tracking-tight sm:text-5xl">{remaining.minutes}</span>
+                <span className="text-sm font-semibold">{strings.minutesShort[lang]}</span>
+              </motion.div>
+
+              <p className="mt-4 text-xs text-foreground-muted">
+                {strings.availableStudyTimeLabel[lang]}:{" "}
+                <span className="font-medium text-foreground">{formatStudyTime(availableMinutes, lang)}</span>
+              </p>
+
+              <button
+                onClick={() => onNavigate("chat")}
+                style={{ backgroundColor: PANIC_COLOR, color: PANIC_ON_COLOR }}
+                className="mt-5 rounded-lg px-6 py-3 text-sm font-semibold transition-transform active:scale-95"
+              >
+                {strings.startRescueSessionBtn[lang]}
+              </button>
+            </>
           ) : (
             <div className="mt-2">
               <EmptyState
@@ -93,36 +151,80 @@ export function PanicRevisionView({
           )}
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {/* Highest priority chapters */}
-          <div className="rounded-2xl border border-border bg-surface p-5">
-            <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-foreground-muted">
-              <ListOrdered size={13} strokeWidth={1.75} />
-              {strings.highestPriorityChapters[lang]}
-            </p>
-            <div className="flex flex-col gap-2">
-              {priorityChapters.map((item, i) => (
-                <div
-                  key={item.subject.id}
-                  className="flex items-center gap-3 rounded-lg px-3 py-2"
-                  style={{ backgroundColor: `${PANIC_COLOR}14` }}
-                >
-                  <span
-                    className="flex size-6 shrink-0 items-center justify-center rounded-full text-xs font-bold"
-                    style={{ backgroundColor: PANIC_COLOR, color: PANIC_ON_COLOR }}
-                  >
-                    {i + 1}
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">{item.label}</p>
-                    <p className="truncate text-xs text-foreground-muted">{item.subject.name[lang]}</p>
-                  </div>
+        {/* Tier 2 — the priority hierarchy: Must Know / Should Know / If Time Allows */}
+        <div>
+          <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-foreground-muted">
+            {strings.highestPriorityChapters[lang]}
+          </p>
+          <div className="flex flex-col gap-3">
+            {mustKnow.length > 0 && (
+              <div
+                className="rounded-2xl border p-4"
+                style={{ borderColor: `${PANIC_COLOR}44`, backgroundColor: `${PANIC_COLOR}0d` }}
+              >
+                <div className="mb-2.5 flex items-center gap-2">
+                  <Target size={14} strokeWidth={1.75} style={{ color: PANIC_COLOR }} />
+                  <p className="text-sm font-semibold tracking-tight" style={{ color: PANIC_COLOR }}>
+                    1. {strings.mustKnowLabel[lang]}
+                  </p>
                 </div>
-              ))}
-            </div>
-          </div>
+                <div className="flex flex-col gap-1.5">
+                  {mustKnow.map((s) => {
+                    const topic = getSubjectNextChapterLabel(s, lang);
+                    return (
+                      <div key={s.id} className="rounded-lg bg-background px-3 py-2">
+                        <p className="text-sm font-medium">{s.name[lang]}</p>
+                        {topic && <p className="text-xs text-foreground-muted">{topic}</p>}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
-          {/* Most important questions */}
+            {shouldKnow.length > 0 && (
+              <div className="rounded-2xl border border-border bg-surface p-4">
+                <div className="mb-2.5 flex items-center gap-2">
+                  <CheckCircle2 size={14} strokeWidth={1.75} className="text-foreground-muted" />
+                  <p className="text-sm font-semibold tracking-tight">2. {strings.shouldKnowLabel[lang]}</p>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {shouldKnow.map((s) => (
+                    <span
+                      key={s.id}
+                      className="rounded-full border border-border px-3 py-1 text-xs text-foreground-muted"
+                    >
+                      {s.name[lang]}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {ifTimeAllows.length > 0 && (
+              <div className="rounded-2xl border border-border bg-surface p-4">
+                <div className="mb-1 flex items-center gap-2">
+                  <Clock size={14} strokeWidth={1.75} className="text-foreground-muted" />
+                  <p className="text-sm font-semibold tracking-tight">3. {strings.ifTimeAllowsLabel[lang]}</p>
+                </div>
+                <p className="mb-2.5 text-xs text-foreground-muted">{strings.ifTimeAllowsDesc[lang]}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {ifTimeAllows.map((s) => (
+                    <span
+                      key={s.id}
+                      className="rounded-full border border-border px-3 py-1 text-xs text-foreground-muted"
+                    >
+                      {s.name[lang]}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Supporting cram content */}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="rounded-2xl border border-border bg-surface p-5">
             <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-foreground-muted">
               <HelpCircle size={13} strokeWidth={1.75} />
@@ -131,7 +233,7 @@ export function PanicRevisionView({
             <div className="flex flex-col gap-2.5">
               {mostImportantQuestions.map((q, i) => (
                 <p key={i} className="text-sm leading-snug">
-                  <span className="font-bold" style={{ color: PANIC_COLOR }}>
+                  <span className="font-semibold" style={{ color: PANIC_COLOR }}>
                     Q{i + 1}.
                   </span>{" "}
                   {q[lang]}
@@ -139,70 +241,58 @@ export function PanicRevisionView({
               ))}
             </div>
           </div>
-        </div>
 
-        {/* Last-minute revision */}
-        <div className="rounded-2xl border border-border bg-surface p-5">
-          <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-foreground-muted">
-            <CheckCircle2 size={13} strokeWidth={1.75} />
-            {strings.lastMinuteRevisionTitle[lang]}
-          </p>
-          <div className="flex gap-2.5 overflow-x-auto pb-1">
-            {lastMinuteFacts.map((fact, i) => (
-              <div
-                key={i}
-                className="w-56 shrink-0 rounded-xl px-4 py-3 text-xs font-medium leading-snug"
-                style={{ backgroundColor: `${PANIC_COLOR}14` }}
-              >
-                {fact[lang]}
-              </div>
-            ))}
+          <div className="rounded-2xl border border-border bg-surface p-5">
+            <p className="mb-3 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-foreground-muted">
+              <CheckCircle2 size={13} strokeWidth={1.75} />
+              {strings.lastMinuteRevisionTitle[lang]}
+            </p>
+            <div className="flex gap-2.5 overflow-x-auto pb-1">
+              {lastMinuteFacts.map((fact, i) => (
+                <div
+                  key={i}
+                  className="w-56 shrink-0 rounded-xl bg-surface-muted px-4 py-3 text-xs font-medium leading-snug"
+                >
+                  {fact[lang]}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
+        {/* Tier 3 — supporting tools, deliberately quieter */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          {/* AI Crash Course */}
-          <div className="rounded-2xl border p-5" style={{ borderColor: `${PANIC_COLOR}33` }}>
-            <p
-              className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide"
-              style={{ color: PANIC_COLOR }}
-            >
+          <div className="rounded-xl border border-border p-4">
+            <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">
               <Sparkles size={13} strokeWidth={1.75} />
               {strings.aiCrashCourseTitle[lang]}
             </p>
-            <p className="mt-1.5 text-sm text-foreground-muted">{strings.aiCrashCourseDesc[lang]}</p>
+            <p className="mt-1.5 text-xs text-foreground-muted">{strings.aiCrashCourseDesc[lang]}</p>
             <button
               onClick={() => onNavigate("chat")}
-              style={{ backgroundColor: PANIC_COLOR, color: PANIC_ON_COLOR }}
-              className="mt-3 rounded-lg px-4 py-2 text-sm font-semibold transition-transform active:scale-95"
+              className="mt-3 rounded-lg border border-border px-4 py-1.5 text-xs font-medium text-foreground-muted transition-colors duration-150 hover:text-foreground"
             >
               {strings.startCrashCourseBtn[lang]}
             </button>
           </div>
 
-          {/* Quick MCQ practice */}
-          <div className="rounded-2xl border p-5" style={{ borderColor: `${PANIC_COLOR}33` }}>
-            <p
-              className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide"
-              style={{ color: PANIC_COLOR }}
-            >
+          <div className="rounded-xl border border-border p-4">
+            <p className="flex items-center gap-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">
               <HelpCircle size={13} strokeWidth={1.75} />
               {strings.quickMcqTitle[lang]}
             </p>
-            <p className="mt-1.5 text-sm text-foreground-muted">{strings.quickMcqDesc[lang]}</p>
+            <p className="mt-1.5 text-xs text-foreground-muted">{strings.quickMcqDesc[lang]}</p>
             <button
               onClick={() => onNavigate("chat")}
-              style={{ backgroundColor: PANIC_COLOR, color: PANIC_ON_COLOR }}
-              className="mt-3 rounded-lg px-4 py-2 text-sm font-semibold transition-transform active:scale-95"
+              className="mt-3 rounded-lg border border-border px-4 py-1.5 text-xs font-medium text-foreground-muted transition-colors duration-150 hover:text-foreground"
             >
               {strings.startMcqBtn[lang]}
             </button>
           </div>
         </div>
 
-        {/* Revision sessions */}
-        <div className="rounded-2xl border border-border bg-surface p-5">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-foreground-muted">
+        <div className="rounded-xl border border-border p-4">
+          <p className="mb-3 text-xs font-medium uppercase tracking-wide text-foreground-muted">
             {strings.revisionSessions[lang]}
           </p>
           <ModeTimer lang={lang} presets={sessionPresets} color={PANIC_COLOR} onColor={PANIC_ON_COLOR} />

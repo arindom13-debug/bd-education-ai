@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
+import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { Menu, PanelLeftOpen } from "lucide-react";
 import { Sidebar, BrandMark, type CanvasView } from "@/components/sidebar";
 import { BottomNav } from "@/components/bottom-nav";
@@ -19,6 +19,7 @@ import { strings, type Lang } from "@/lib/i18n";
 import { chatHistory, onboardingThread } from "@/lib/chat-data";
 import { defaultStudyPlan, classLevelOptions, type StudyPlan } from "@/lib/study-plan";
 import { subjects as initialSubjects, type Subject } from "@/lib/curriculum-data";
+import { loadChatLanguage, saveChatLanguage, type ChatLanguage } from "@/lib/chat-language";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -29,6 +30,11 @@ export function AppShell() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [studySessionActive, setStudySessionActive] = useState(false);
+  const [chatLanguage, setChatLanguageState] = useState<ChatLanguage>(() => loadChatLanguage());
+  const setChatLanguage = (value: ChatLanguage) => {
+    setChatLanguageState(value);
+    saveChatLanguage(value);
+  };
   const [plan, setPlan] = useState<StudyPlan>(defaultStudyPlan);
   const updatePlan = (patch: Partial<StudyPlan>) => setPlan((p) => ({ ...p, ...patch }));
   const [subjects, setSubjects] = useState<Subject[]>(initialSubjects);
@@ -103,7 +109,7 @@ export function AppShell() {
   };
 
   return (
-    <>
+    <MotionConfig reducedMotion="user">
       <AnimatePresence>
         {studySessionActive && (
           <StudySessionView
@@ -133,6 +139,8 @@ export function AppShell() {
             studentName={studentName}
             studentClassLabel={studentClassLabel}
             plan={plan}
+            chatLanguage={chatLanguage}
+            onChangeChatLanguage={setChatLanguage}
           />
         </div>
       </aside>
@@ -190,7 +198,16 @@ export function AppShell() {
             transition={{ duration: 0.18, ease: EASE }}
           >
             {view === "chat" && (
-              <ChatView key={activeChat?.id ?? "new"} lang={lang} activeChat={activeChat} />
+              <ChatView
+                key={activeChat?.id ?? "new"}
+                lang={lang}
+                activeChat={activeChat}
+                plan={plan}
+                subjects={subjects}
+                chatLanguage={chatLanguage}
+                onStartSession={() => setStudySessionActive(true)}
+                onOpenChat={selectChat}
+              />
             )}
             {view === "progress" && (
               <ProgressView
@@ -251,6 +268,8 @@ export function AppShell() {
             studentName={studentName}
             studentClassLabel={studentClassLabel}
             plan={plan}
+            chatLanguage={chatLanguage}
+            onChangeChatLanguage={setChatLanguage}
           />
         </div>
         <button
@@ -263,6 +282,6 @@ export function AppShell() {
       </div>
     </div>
       )}
-    </>
+    </MotionConfig>
   );
 }
