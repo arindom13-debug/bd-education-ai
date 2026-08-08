@@ -11,9 +11,13 @@ import {
   Flame,
   Clock,
   Check,
+  BookOpenCheck,
 } from "lucide-react";
 import { AnimatedProgressBar } from "@/components/animated-progress-bar";
 import { CircularProgress } from "@/components/circular-progress";
+import { EmptyState } from "@/components/empty-state";
+import { CompletionCelebration, CompletedBadge, playSuccessChime } from "@/components/completion-celebration";
+import type { CanvasView } from "@/components/sidebar";
 import { strings, type Lang } from "@/lib/i18n";
 import {
   getSubjectProgress,
@@ -34,6 +38,8 @@ export function StudyView({
   onAddChapter,
   onToggleChapter,
   onReorderSubjects,
+  onNavigate,
+  onStartSession,
 }: {
   lang: Lang;
   subjects: Subject[];
@@ -42,6 +48,8 @@ export function StudyView({
   onAddChapter: (subjectId: string, name: string) => void;
   onToggleChapter: (subjectId: string, chapterId: string) => void;
   onReorderSubjects: (subjects: Subject[]) => void;
+  onNavigate: (view: CanvasView) => void;
+  onStartSession: () => void;
 }) {
   const [expanded, setExpanded] = useState<string | null>("chemistry");
   const [newSubjectName, setNewSubjectName] = useState("");
@@ -49,6 +57,7 @@ export function StudyView({
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   const [justCompletedId, setJustCompletedId] = useState<string | null>(null);
+  const [justCompletedSubjectId, setJustCompletedSubjectId] = useState<string | null>(null);
 
   const handleAddSubject = () => {
     if (!newSubjectName.trim()) return;
@@ -66,6 +75,19 @@ export function StudyView({
     if (chapter.status !== "mastered") {
       setJustCompletedId(chapter.id);
       setTimeout(() => setJustCompletedId((id) => (id === chapter.id ? null : id)), 500);
+
+      const subject = subjects.find((s) => s.id === subjectId);
+      const willCompleteSubject =
+        subject !== undefined &&
+        subject.chapters.every((c) => c.id === chapter.id || c.status === "mastered");
+      if (willCompleteSubject) {
+        setJustCompletedSubjectId(subjectId);
+        playSuccessChime();
+        setTimeout(
+          () => setJustCompletedSubjectId((id) => (id === subjectId ? null : id)),
+          1600
+        );
+      }
     }
     onToggleChapter(subjectId, chapter.id);
   };
@@ -108,7 +130,10 @@ export function StudyView({
           {todaysSessionMinutes} {strings.minutesShort[lang]}
           {recommended && ` — ${recommended.subjectName[lang]}: ${recommended.chapter.name[lang]}`}
         </p>
-        <button className="mt-3 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-transform active:scale-95">
+        <button
+          onClick={onStartSession}
+          className="mt-3 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-transform active:scale-95"
+        >
           {strings.startSession[lang]}
         </button>
       </div>
@@ -127,7 +152,14 @@ export function StudyView({
               </p>
             </>
           ) : (
-            <p className="mt-1.5 text-sm text-foreground-muted">{strings.allCaughtUp[lang]}</p>
+            <EmptyState
+              icon={Trophy}
+              title={strings.allCaughtUp[lang]}
+              description={strings.allCaughtUpDesc[lang]}
+              ctaLabel={strings.exploreToolsBtn[lang]}
+              onCtaClick={() => onNavigate("tools")}
+              compact
+            />
           )}
         </div>
         <div className="rounded-xl border border-border bg-surface p-4">
@@ -151,6 +183,7 @@ export function StudyView({
           const isCompleted = progress === 100;
           const isDragging = draggedId === subject.id;
           const isDragOver = dragOverId === subject.id && draggedId !== subject.id;
+          const isJustCompleted = justCompletedSubjectId === subject.id;
           return (
             <div
               key={subject.id}
@@ -166,10 +199,11 @@ export function StudyView({
               }}
               onDragLeave={() => setDragOverId((id) => (id === subject.id ? null : id))}
               onDrop={() => handleDrop(subject.id)}
-              className={`rounded-xl border bg-surface transition-all duration-150 ${
+              className={`relative rounded-xl border bg-surface transition-all duration-150 hover:border-accent/30 hover:shadow-[0_8px_20px_-14px_var(--color-accent)] ${
                 isCompleted ? "border-success/40" : "border-border"
               } ${isDragging ? "opacity-40" : ""} ${isDragOver ? "ring-2 ring-accent" : ""}`}
             >
+              {isJustCompleted && <CompletionCelebration />}
               <div className="flex items-center gap-1 p-4">
                 <span
                   className="shrink-0 cursor-grab touch-none text-foreground-muted active:cursor-grabbing"
@@ -192,10 +226,10 @@ export function StudyView({
                     <div className="flex items-center gap-2">
                       <span className="truncate font-medium">{subject.name[lang]}</span>
                       {isCompleted && (
-                        <span className="flex shrink-0 items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-medium text-success">
+                        <CompletedBadge>
                           <Trophy size={10} strokeWidth={2} />
                           {strings.completedBadge[lang]}
-                        </span>
+                        </CompletedBadge>
                       )}
                     </div>
                     <AnimatedProgressBar value={progress} className="mt-2" />
@@ -212,9 +246,10 @@ export function StudyView({
               </div>
 
               <div
-                className={`grid transition-[grid-template-rows] duration-300 ease-in-out ${
+                className={`grid transition-[grid-template-rows] duration-300 ${
                   isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
                 }`}
+                style={{ transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)" }}
               >
                 <div className="overflow-hidden">
                   <div className="border-t border-border px-4 py-3">
@@ -226,7 +261,18 @@ export function StudyView({
                     </div>
 
                     {subject.chapters.length === 0 ? (
-                      <p className="pb-2 text-sm text-foreground-muted">{strings.noChaptersYet[lang]}</p>
+                      <div className="pb-2">
+                        <EmptyState
+                          icon={BookOpenCheck}
+                          title={strings.noChaptersYet[lang]}
+                          description={strings.chaptersEmptyDesc[lang]}
+                          ctaLabel={strings.addFirstChapterBtn[lang]}
+                          onCtaClick={() =>
+                            document.getElementById(`chapter-input-${subject.id}`)?.focus()
+                          }
+                          compact
+                        />
+                      </div>
                     ) : (
                       <div className="flex flex-col gap-0.5 pb-2">
                         {subject.chapters.map((chapter) => (
@@ -268,6 +314,7 @@ export function StudyView({
 
                     <div className="flex items-center gap-2">
                       <input
+                        id={`chapter-input-${subject.id}`}
                         value={newChapterName}
                         onChange={(e) => setNewChapterName(e.target.value)}
                         onKeyDown={(e) => e.key === "Enter" && handleAddChapter(subject.id)}

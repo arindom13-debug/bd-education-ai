@@ -1,3 +1,7 @@
+"use client";
+
+import { motion } from "framer-motion";
+
 export function AnimatedProgressBar({
   value,
   className = "",
@@ -10,9 +14,11 @@ export function AnimatedProgressBar({
   const clamped = Math.min(100, Math.max(0, value));
   return (
     <div className={`relative ${height} w-full overflow-hidden rounded-full bg-surface-muted ${className}`}>
-      <div
-        className="h-full rounded-full bg-linear-to-r from-accent/80 to-accent shadow-[0_0_8px_var(--color-accent)] transition-[width] duration-500 ease-out"
-        style={{ width: `${clamped}%` }}
+      <motion.div
+        className="h-full rounded-full bg-linear-to-r from-accent/80 to-accent shadow-[0_0_8px_var(--color-accent)]"
+        initial={{ width: 0 }}
+        animate={{ width: `${clamped}%` }}
+        transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
       />
     </div>
   );

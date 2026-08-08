@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import {
   Timer,
   NotebookPen,
@@ -205,11 +206,13 @@ export function ToolsView({ lang }: { lang: Lang }) {
         </div>
       </div>
 
-      {active && (
-        <Modal title={strings[active.title][lang]} onClose={() => setActiveTool(null)}>
-          <ToolPanel id={active.id} lang={lang} />
-        </Modal>
-      )}
+      <AnimatePresence>
+        {active && (
+          <Modal title={strings[active.title][lang]} onClose={() => setActiveTool(null)}>
+            <ToolPanel id={active.id} lang={lang} />
+          </Modal>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

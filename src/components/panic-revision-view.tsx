@@ -1,7 +1,8 @@
 "use client";
 
-import { ArrowLeft, Zap, ListOrdered, HelpCircle, Sparkles, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Zap, ListOrdered, HelpCircle, Sparkles, CheckCircle2, CalendarClock } from "lucide-react";
 import { ModeTimer } from "@/components/mode-timer";
+import { EmptyState } from "@/components/empty-state";
 import type { CanvasView } from "@/components/sidebar";
 import { strings, type Lang } from "@/lib/i18n";
 import { getNextRecommendedChapter, type Subject } from "@/lib/curriculum-data";
@@ -78,7 +79,17 @@ export function PanicRevisionView({
               {hoursLeft}
             </p>
           ) : (
-            <p className="mt-2 text-sm text-foreground-muted">{strings.noExamDateYet[lang]}</p>
+            <div className="mt-2">
+              <EmptyState
+                icon={CalendarClock}
+                title={strings.noExamDateYet[lang]}
+                description={strings.examDateEmptyDesc[lang]}
+                ctaLabel={strings.setExamDateBtn[lang]}
+                onCtaClick={() => onNavigate("setup")}
+                accentColor={PANIC_COLOR}
+                onAccentColor={PANIC_ON_COLOR}
+              />
+            </div>
           )}
         </div>
 

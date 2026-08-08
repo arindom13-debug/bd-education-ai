@@ -1,3 +1,7 @@
+"use client";
+
+import { motion } from "framer-motion";
+
 export function CircularProgress({
   value,
   size = 64,
@@ -28,19 +32,28 @@ export function CircularProgress({
           className="stroke-surface-muted"
           fill="none"
         />
-        <circle
+        <motion.circle
           cx={size / 2}
           cy={size / 2}
           r={radius}
           strokeWidth={strokeWidth}
-          className="stroke-accent transition-[stroke-dashoffset] duration-700 ease-out"
+          className="stroke-accent"
           fill="none"
           strokeDasharray={circumference}
-          strokeDashoffset={offset}
           strokeLinecap="round"
+          initial={{ strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
         />
       </svg>
-      <span className="absolute text-sm font-semibold tabular-nums">{label ?? `${clamped}%`}</span>
+      <motion.span
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3, delay: 0.5 }}
+        className="absolute text-sm font-semibold tabular-nums"
+      >
+        {label ?? `${clamped}%`}
+      </motion.span>
     </div>
   );
 }

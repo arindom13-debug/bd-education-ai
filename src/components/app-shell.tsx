@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Menu, PanelLeftOpen } from "lucide-react";
 import { Sidebar, BrandMark, type CanvasView } from "@/components/sidebar";
 import { BottomNav } from "@/components/bottom-nav";
@@ -11,11 +12,15 @@ import { SetupView } from "@/components/setup-view";
 import { ToolsView } from "@/components/tools-view";
 import { ExamModeView } from "@/components/exam-mode-view";
 import { PanicRevisionView } from "@/components/panic-revision-view";
+import { StudySessionView } from "@/components/study-session-view";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { Tooltip } from "@/components/tooltip";
 import { strings, type Lang } from "@/lib/i18n";
 import { chatHistory, onboardingThread } from "@/lib/chat-data";
 import { defaultStudyPlan, classLevelOptions, type StudyPlan } from "@/lib/study-plan";
 import { subjects as initialSubjects, type Subject } from "@/lib/curriculum-data";
+
+const EASE = [0.16, 1, 0.3, 1] as const;
 
 export function AppShell() {
   const [lang, setLang] = useState<Lang>("en");
@@ -23,6 +28,7 @@ export function AppShell() {
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [studySessionActive, setStudySessionActive] = useState(false);
   const [plan, setPlan] = useState<StudyPlan>(defaultStudyPlan);
   const updatePlan = (patch: Partial<StudyPlan>) => setPlan((p) => ({ ...p, ...patch }));
   const [subjects, setSubjects] = useState<Subject[]>(initialSubjects);
@@ -97,6 +103,17 @@ export function AppShell() {
   };
 
   return (
+    <>
+      <AnimatePresence>
+        {studySessionActive && (
+          <StudySessionView
+            lang={lang}
+            subjects={subjects}
+            onEnd={() => setStudySessionActive(false)}
+          />
+        )}
+      </AnimatePresence>
+      {!studySessionActive && (
     <div className="min-h-dvh">
       <aside
         className={`fixed inset-y-0 left-0 z-10 hidden overflow-hidden border-border bg-surface transition-[width,border-color] duration-300 ease-in-out md:flex md:flex-col ${
@@ -115,25 +132,32 @@ export function AppShell() {
             onCollapse={() => setSidebarCollapsed(true)}
             studentName={studentName}
             studentClassLabel={studentClassLabel}
+            plan={plan}
           />
         </div>
       </aside>
 
-      <button
-        onClick={() => setSidebarCollapsed(false)}
-        aria-label="Open sidebar"
-        className={`fixed left-3 top-3 z-10 hidden rounded-md border border-border bg-surface p-1.5 text-foreground-muted transition-opacity duration-300 ease-in-out hover:text-foreground md:flex ${
+      <div
+        className={`fixed left-3 top-3 z-10 hidden transition-opacity duration-300 ease-in-out md:block ${
           sidebarCollapsed ? "opacity-100" : "pointer-events-none opacity-0"
         }`}
       >
-        <PanelLeftOpen size={18} strokeWidth={1.75} />
-      </button>
+        <Tooltip label={strings.expandSidebarLabel[lang]}>
+          <button
+            onClick={() => setSidebarCollapsed(false)}
+            aria-label="Open sidebar"
+            className="flex rounded-md border border-border bg-surface p-1.5 text-foreground-muted transition-colors duration-150 hover:text-foreground active:scale-95"
+          >
+            <PanelLeftOpen size={18} strokeWidth={1.75} />
+          </button>
+        </Tooltip>
+      </div>
 
       <header className="sticky top-0 z-20 flex items-center justify-between border-b border-border bg-surface px-4 py-3 md:hidden">
         <div className="flex items-center gap-2">
           <button
             onClick={() => setHistoryOpen(true)}
-            className="flex items-center rounded-md p-1.5 text-foreground-muted"
+            className="flex items-center rounded-md p-1.5 text-foreground-muted transition-colors duration-150 active:scale-95"
             aria-label="Menu"
           >
             <Menu size={18} strokeWidth={1.75} />
@@ -145,7 +169,7 @@ export function AppShell() {
           <ThemeToggle />
           <button
             onClick={toggleLang}
-            className="rounded-md border border-border px-2 py-1 text-xs text-foreground-muted"
+            className="rounded-md border border-border px-2 py-1 text-xs text-foreground-muted transition-colors duration-150 hover:text-foreground"
           >
             {lang === "en" ? "বাংলা" : "EN"}
           </button>
@@ -157,39 +181,51 @@ export function AppShell() {
           sidebarCollapsed ? "md:ml-0" : "md:ml-72"
         }`}
       >
-        {view === "chat" && (
-          <ChatView key={activeChat?.id ?? "new"} lang={lang} activeChat={activeChat} />
-        )}
-        {view === "progress" && (
-          <ProgressView
-            lang={lang}
-            plan={plan}
-            onNavigate={selectView}
-            subjects={subjects}
-            onOpenChat={selectChat}
-          />
-        )}
-        {view === "study" && (
-          <StudyView
-            lang={lang}
-            subjects={subjects}
-            onAddSubject={addSubject}
-            onRemoveSubject={removeSubject}
-            onAddChapter={addChapter}
-            onToggleChapter={toggleChapter}
-            onReorderSubjects={reorderSubjects}
-          />
-        )}
-        {view === "setup" && (
-          <SetupView lang={lang} plan={plan} onChange={updatePlan} onFinish={() => selectView("progress")} />
-        )}
-        {view === "tools" && <ToolsView lang={lang} />}
-        {view === "examMode" && (
-          <ExamModeView lang={lang} plan={plan} subjects={subjects} onNavigate={selectView} />
-        )}
-        {view === "panicRevision" && (
-          <PanicRevisionView lang={lang} plan={plan} subjects={subjects} onNavigate={selectView} />
-        )}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={view}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.18, ease: EASE }}
+          >
+            {view === "chat" && (
+              <ChatView key={activeChat?.id ?? "new"} lang={lang} activeChat={activeChat} />
+            )}
+            {view === "progress" && (
+              <ProgressView
+                lang={lang}
+                plan={plan}
+                onNavigate={selectView}
+                subjects={subjects}
+                onOpenChat={selectChat}
+              />
+            )}
+            {view === "study" && (
+              <StudyView
+                lang={lang}
+                subjects={subjects}
+                onAddSubject={addSubject}
+                onRemoveSubject={removeSubject}
+                onAddChapter={addChapter}
+                onToggleChapter={toggleChapter}
+                onReorderSubjects={reorderSubjects}
+                onNavigate={selectView}
+                onStartSession={() => setStudySessionActive(true)}
+              />
+            )}
+            {view === "setup" && (
+              <SetupView lang={lang} plan={plan} onChange={updatePlan} onFinish={() => selectView("progress")} />
+            )}
+            {view === "tools" && <ToolsView lang={lang} />}
+            {view === "examMode" && (
+              <ExamModeView lang={lang} plan={plan} subjects={subjects} onNavigate={selectView} />
+            )}
+            {view === "panicRevision" && (
+              <PanicRevisionView lang={lang} plan={plan} subjects={subjects} onNavigate={selectView} />
+            )}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
       <div className="sticky bottom-0 z-20 md:hidden">
@@ -214,6 +250,7 @@ export function AppShell() {
             onNewChat={newChat}
             studentName={studentName}
             studentClassLabel={studentClassLabel}
+            plan={plan}
           />
         </div>
         <button
@@ -225,5 +262,7 @@ export function AppShell() {
         />
       </div>
     </div>
+      )}
+    </>
   );
 }

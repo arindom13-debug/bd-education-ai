@@ -5,6 +5,7 @@ import { ArrowUp, Sparkles } from "lucide-react";
 import { strings, type Lang } from "@/lib/i18n";
 import { subjects } from "@/lib/curriculum-data";
 import type { ChatMessage, ChatThread } from "@/lib/chat-data";
+import { TypingDots } from "@/components/typing-dots";
 
 function Bubble({ message, lang }: { message: ChatMessage; lang: Lang }) {
   const isUser = message.role === "user";
@@ -135,8 +136,8 @@ export function ChatView({ lang, activeChat }: { lang: Lang; activeChat: ChatThr
         ))}
         {isTyping && (
           <div className="flex justify-start">
-            <div className="rounded-2xl border border-border bg-surface px-4 py-2.5 text-sm text-foreground-muted">
-              …
+            <div className="rounded-2xl border border-border bg-surface px-4 py-2.5">
+              <TypingDots />
             </div>
           </div>
         )}

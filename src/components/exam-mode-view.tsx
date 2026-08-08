@@ -1,7 +1,19 @@
 "use client";
 
-import { ArrowLeft, GraduationCap, Clock, Sparkles, Target, MessageSquare, BookOpen, Wrench } from "lucide-react";
+import {
+  ArrowLeft,
+  GraduationCap,
+  Clock,
+  Sparkles,
+  Target,
+  MessageSquare,
+  BookOpen,
+  Wrench,
+  CalendarClock,
+  TrendingDown,
+} from "lucide-react";
 import { ModeTimer } from "@/components/mode-timer";
+import { EmptyState } from "@/components/empty-state";
 import type { CanvasView } from "@/components/sidebar";
 import { strings, type Lang } from "@/lib/i18n";
 import { getNextRecommendedChapter, getSubjectRemainingMinutes, type Subject } from "@/lib/curriculum-data";
@@ -84,7 +96,16 @@ export function ExamModeView({
               <p className="text-sm text-foreground-muted">{strings.daysLeft[lang]}</p>
             </>
           ) : (
-            <p className="mt-2 text-sm text-foreground-muted">{strings.noExamDateYet[lang]}</p>
+            <div className="mt-2">
+              <EmptyState
+                icon={CalendarClock}
+                title={strings.noExamDateYet[lang]}
+                description={strings.examDateEmptyDesc[lang]}
+                ctaLabel={strings.setExamDateBtn[lang]}
+                onCtaClick={() => onNavigate("setup")}
+                accentColor={EXAM_COLOR}
+              />
+            </div>
           )}
         </div>
 
@@ -153,7 +174,15 @@ export function ExamModeView({
             {strings.weakTopics[lang]}
           </p>
           {weakSubjects.length === 0 ? (
-            <p className="text-sm text-foreground-muted">{strings.noWeakTopicsYet[lang]}</p>
+            <EmptyState
+              icon={TrendingDown}
+              title={strings.noWeakTopicsYet[lang]}
+              description={strings.weakTopicsEmptyDesc[lang]}
+              ctaLabel={strings.addWeakTopicsBtn[lang]}
+              onCtaClick={() => onNavigate("setup")}
+              accentColor={EXAM_COLOR}
+              compact
+            />
           ) : (
             <div className="flex flex-wrap gap-1.5">
               {weakSubjects.map((s) => (
