@@ -9,16 +9,14 @@ import {
   CalendarClock,
   TrendingDown,
   CalendarDays,
-  History,
   Sparkles,
   BarChart3,
   Trophy,
   ChevronDown,
   BookOpenCheck,
   Clock,
+  Clock3,
   ArrowRight,
-  MessageSquare,
-  CheckCircle2,
 } from "lucide-react";
 import { CircularProgress } from "@/components/circular-progress";
 import { EmptyState } from "@/components/empty-state";
@@ -28,23 +26,16 @@ import { AiRecommendationStrip } from "@/components/ai-recommendation-strip";
 import type { CanvasView } from "@/components/sidebar";
 import { strings, type Lang } from "@/lib/i18n";
 import {
-  suggestedTopic,
   getSubjectProgress,
   getSubjectTotalChapters,
   getSubjectChaptersCompleted,
   getSubjectNextChapterLabel,
   getSubjectRemainingMinutes,
+  getActiveChapter,
   getNextRecommendedChapter,
   type Subject,
-  type ChapterStatus,
 } from "@/lib/curriculum-data";
 import { daysUntil, type StudyPlan } from "@/lib/study-plan";
-import { chatHistory } from "@/lib/chat-data";
-
-const dailyMission = {
-  title: { en: "Finish 1 chapter", bn: "১টি অধ্যায় শেষ করো" },
-  subtitle: { en: "Chemistry: Behaviour of Gases", bn: "রসায়ন: গ্যাসের আচরণ" },
-};
 
 const upcomingExams = [
   { subject: { en: "Chemistry Test", bn: "রসায়ন পরীক্ষা" }, date: { en: "Aug 12", bn: "১২ আগস্ট" } },
@@ -73,10 +64,19 @@ function getGreeting(lang: Lang, name: string): string {
   return lang === "en" ? `Welcome back${namePart}.` : `আবার স্বাগতম${namePart}।`;
 }
 
-function getRecommendationSentence(lang: Lang, chapterName: string, status: ChapterStatus): string {
-  const isInProgress = status === "in-progress";
-  if (lang === "en") return `${isInProgress ? "Finish" : "Start"} ${chapterName}.`;
-  return `${chapterName} ${isInProgress ? "শেষ করো" : "শুরু করো"}।`;
+/** "Finish X" when X is genuinely in progress, "Start X" otherwise — so this
+ * reads as a distinct instruction rather than repeating the chapter name. */
+function getRecommendationSentence(lang: Lang, chapterName: string, isCurrent: boolean): string {
+  if (lang === "en") return `${isCurrent ? "Finish" : "Start"} ${chapterName}.`;
+  return `${chapterName} ${isCurrent ? "শেষ করো" : "শুরু করো"}।`;
+}
+
+/** A meaningful action for the day, not a restatement of the current
+ * chapter's name — keeps Daily Mission distinct from every other card that
+ * already names the current chapter. */
+function getDailyMissionText(lang: Lang, minutes: number): string {
+  if (lang === "en") return `Complete today's ${minutes}-minute session`;
+  return `আজকের ${minutes} মিনিটের সেশন সম্পন্ন করো`;
 }
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -121,6 +121,22 @@ function Card({ className = "", children }: { className?: string; children: Reac
     >
       {children}
     </motion.div>
+  );
+}
+
+/** Groups the hub into "Today → Progress → Needs Attention → Upcoming →
+ * Activity" so each block answers one question rather than one long feed. */
+function GroupHeading({ index, children }: { index: number; children: React.ReactNode }) {
+  return (
+    <motion.p
+      custom={index}
+      variants={sectionVariants}
+      initial="hidden"
+      animate="visible"
+      className="-mb-4 text-xs font-medium uppercase tracking-wide text-foreground-muted"
+    >
+      {children}
+    </motion.p>
   );
 }
 
@@ -178,16 +194,13 @@ export function ProgressView({
   plan,
   onNavigate,
   subjects,
-  onOpenChat,
 }: {
   lang: Lang;
   plan: StudyPlan;
   onNavigate: (view: CanvasView) => void;
   subjects: Subject[];
-  onOpenChat: (id: string) => void;
 }) {
   const [expandedSubjectId, setExpandedSubjectId] = useState<string | null>(null);
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -201,15 +214,13 @@ export function ProgressView({
       : Math.round(subjects.reduce((sum, s) => sum + getSubjectProgress(s), 0) / subjects.length);
   const remaining = daysUntil(plan.examDate);
   const weakSubjects = subjects.filter((s) => plan.weakSubjects.includes(s.id));
-  const recentThreads = chatHistory.slice(0, 4);
   const maxMinutes = Math.max(...weeklyMinutes, 60);
   const weeklyMinutesTotal = weeklyMinutes.reduce((sum, m) => sum + m, 0);
   const streakDays = streakDaysActive.filter(Boolean).length;
-  const suggestedSubject = subjects.find((s) => s.id === suggestedTopic.subjectId);
-  const suggestedRemainingMinutes = suggestedSubject ? getSubjectRemainingMinutes(suggestedSubject) : 0;
-  const lastChat = chatHistory[0] ?? null;
-  const lastChatSubject = lastChat ? subjects.find((s) => s.id === lastChat.subjectId) : undefined;
-  const lastChatRemainingMinutes = lastChatSubject ? getSubjectRemainingMinutes(lastChatSubject) : 0;
+  // The one thing the student is genuinely mid-way through, if anything —
+  // "Pick Up Where You Left Off" only appears when this is real.
+  const active = getActiveChapter(subjects);
+  const activeRemainingMinutes = active ? getSubjectRemainingMinutes(active.subject) : 0;
 
   const greeting = getGreeting(lang, plan.name.trim());
   const jsDay = new Date().getDay();
@@ -217,9 +228,10 @@ export function ProgressView({
   const yesterdayIndex = (todayIndex + 6) % 7;
   const yesterdayMinutes = weeklyMinutes[yesterdayIndex];
   const briefingRecommended = getNextRecommendedChapter(subjects);
-  const briefingChapterName = briefingRecommended?.chapter.name[lang] ?? suggestedTopic.chapterName[lang];
-  const briefingChapterStatus: ChapterStatus = briefingRecommended?.chapter.status ?? "in-progress";
-  const recommendationSentence = getRecommendationSentence(lang, briefingChapterName, briefingChapterStatus);
+  const recommendationSentence = briefingRecommended
+    ? getRecommendationSentence(lang, briefingRecommended.chapter.name[lang], !!active)
+    : null;
+  const dailyMissionText = getDailyMissionText(lang, active?.chapter.estimatedMinutes ?? 30);
 
   return (
     <div className="p-5 sm:p-8">
@@ -237,6 +249,8 @@ export function ProgressView({
               animate={{ opacity: 1 }}
               transition={{ duration: 0.25 }}
             >
+              <GroupHeading index={0}>{strings.hubToday[lang]}</GroupHeading>
+
               {/* Daily AI Briefing */}
               <Section
                 index={0}
@@ -265,7 +279,7 @@ export function ProgressView({
                         {strings.yesterdayLabel[lang]}
                       </p>
                       <p className="mt-1 flex items-center gap-1.5 text-sm font-medium">
-                        <CheckCircle2 size={14} strokeWidth={1.75} className="text-success" />
+                        <Clock3 size={14} strokeWidth={1.75} className="text-foreground-muted" />
                         {strings.studiedLabel[lang]} {yesterdayMinutes} {strings.minutesShort[lang]}
                       </p>
                     </div>
@@ -274,7 +288,7 @@ export function ProgressView({
                         {strings.currentStreakLabel[lang]}
                       </p>
                       <p className="mt-1 flex items-center gap-1.5 text-sm font-medium">
-                        <Flame size={14} strokeWidth={1.75} className="text-warning" />
+                        <Flame size={14} strokeWidth={1.75} className="text-foreground-muted" />
                         {streakDays} {strings.streak[lang]}
                       </p>
                     </div>
@@ -283,7 +297,7 @@ export function ProgressView({
                         {strings.examLabel[lang]}
                       </p>
                       <p className="mt-1 flex items-center gap-1.5 text-sm font-medium">
-                        <CalendarClock size={14} strokeWidth={1.75} className="text-accent" />
+                        <CalendarClock size={14} strokeWidth={1.75} className="text-foreground-muted" />
                         {remaining !== null ? `${Math.max(remaining, 0)} ${strings.daysLeft[lang]}` : strings.notSetYet[lang]}
                       </p>
                     </div>
@@ -294,7 +308,9 @@ export function ProgressView({
                       <p className="text-xs font-medium uppercase tracking-wide text-accent">
                         {strings.todaysRecommendationLabel[lang]}
                       </p>
-                      <p className="mt-1 truncate text-sm font-medium">{recommendationSentence}</p>
+                      <p className="mt-1 truncate text-sm font-medium">
+                        {recommendationSentence ?? strings.allCaughtUp[lang]}
+                      </p>
                     </div>
                     <motion.button
                       whileHover={{ scale: 1.03 }}
@@ -310,183 +326,106 @@ export function ProgressView({
                 </div>
               </Section>
 
-              {/* Hero: Continue Learning */}
-              <Section
-                index={1}
-                className="rounded-3xl border border-accent/30 bg-surface p-6 sm:p-7"
-              >
-                <div className="flex flex-col gap-6">
-                  <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-center gap-4">
-                      <CircularProgress value={suggestedTopic.progress} size={80} strokeWidth={7} />
-                      <div className="min-w-0">
-                        <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-accent">
-                          <PlayCircle size={14} strokeWidth={1.75} />
-                          {strings.pickUpWhereLeftOff[lang]}
-                        </p>
-                        <p className="mt-1.5 text-xs font-medium uppercase tracking-wide text-foreground-muted">
-                          {suggestedTopic.subjectName[lang]}
-                        </p>
-                        <p className="truncate text-xl font-semibold tracking-tight">
-                          {suggestedTopic.chapterName[lang]}
-                        </p>
-                      </div>
-                    </div>
-                    <motion.button
-                      whileHover={{ scale: 1.03, boxShadow: "0 18px 40px -14px var(--color-accent)" }}
-                      whileTap={{ scale: 0.96 }}
-                      transition={{ duration: 0.15 }}
-                      onClick={() => onNavigate("chat")}
-                      className="flex shrink-0 items-center justify-center gap-2 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-accent-foreground shadow-[0_10px_28px_-14px_var(--color-accent)] sm:self-auto"
-                    >
-                      {strings.continueLearning[lang]}
-                      <ArrowRight size={16} strokeWidth={2} />
-                    </motion.button>
-                  </div>
-
-                  <div className="grid grid-cols-3 divide-x divide-accent/20 rounded-2xl border border-accent/20 bg-surface/70">
-                    <div className="flex flex-col items-center gap-1 px-2 py-3 text-center">
-                      <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-foreground-muted">
-                        <Clock size={11} strokeWidth={1.75} />
-                        {strings.timeRemaining[lang]}
-                      </span>
-                      <span className="text-sm font-semibold">
-                        {formatTimeRemaining(suggestedRemainingMinutes, lang)}
-                      </span>
-                    </div>
-                    <div className="flex flex-col items-center gap-1 px-2 py-3 text-center">
-                      <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-foreground-muted">
-                        <Target size={11} strokeWidth={1.75} />
-                        {strings.todaysGoalLabel[lang]}
-                      </span>
-                      <span className="truncate text-sm font-semibold">{dailyMission.title[lang]}</span>
-                    </div>
-                    <div className="flex flex-col items-center gap-1 px-2 py-3 text-center">
-                      <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-foreground-muted">
-                        <Flame size={11} strokeWidth={1.75} className="text-warning" />
-                        {strings.streak[lang]}
-                      </span>
-                      <span className="text-sm font-semibold">{streakDays}</span>
-                    </div>
-                  </div>
-                </div>
-              </Section>
-
-              {/* Continue Last Conversation */}
-              {lastChat && (
-                <Section index={2}>
-                  <Card className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent">
-                        <MessageSquare size={18} strokeWidth={1.75} />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
-                          {strings.continueLastConversation[lang]}
-                        </p>
-                        <p className="mt-1 truncate text-base font-semibold tracking-tight">
-                          {lastChat.title[lang]}
-                        </p>
-                        <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-foreground-muted">
-                          <span className="flex items-center gap-1">
-                            <History size={11} strokeWidth={1.75} />
-                            {lastChat.group === "today" ? strings.today[lang] : strings.yesterday[lang]}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock size={11} strokeWidth={1.75} />
-                            {formatTimeRemaining(lastChatRemainingMinutes, lang)} {strings.timeLeftSuffix[lang]}
-                          </span>
+              {/* Hero: Continue Learning — only shown when a session is genuinely unfinished */}
+              {active && (
+                <Section
+                  index={1}
+                  className="rounded-3xl border border-accent/30 bg-surface p-6 sm:p-7"
+                >
+                  <div className="flex flex-col gap-6">
+                    <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-4">
+                        <CircularProgress value={active.chapter.progress} size={80} strokeWidth={7} />
+                        <div className="min-w-0">
+                          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-accent">
+                            <PlayCircle size={14} strokeWidth={1.75} />
+                            {strings.pickUpWhereLeftOff[lang]}
+                          </p>
+                          <p className="mt-1.5 text-xs font-medium uppercase tracking-wide text-foreground-muted">
+                            {active.subject.name[lang]}
+                          </p>
+                          <p className="truncate text-xl font-semibold tracking-tight">
+                            {active.chapter.name[lang]}
+                          </p>
                         </div>
                       </div>
+                      <motion.button
+                        whileHover={{ scale: 1.03, boxShadow: "0 18px 40px -14px var(--color-accent)" }}
+                        whileTap={{ scale: 0.96 }}
+                        transition={{ duration: 0.15 }}
+                        onClick={() => onNavigate("chat")}
+                        className="flex shrink-0 items-center justify-center gap-2 rounded-xl bg-accent px-6 py-3 text-sm font-semibold text-accent-foreground shadow-[0_10px_28px_-14px_var(--color-accent)] sm:self-auto"
+                      >
+                        {strings.continueLearning[lang]}
+                        <ArrowRight size={16} strokeWidth={2} />
+                      </motion.button>
                     </div>
-                    <motion.button
-                      whileHover={{ scale: 1.03 }}
-                      whileTap={{ scale: 0.96 }}
-                      transition={{ duration: 0.15 }}
-                      onClick={() => onOpenChat(lastChat.id)}
-                      className="flex shrink-0 items-center justify-center gap-1.5 self-start rounded-lg bg-accent px-5 py-2.5 text-sm font-medium text-accent-foreground sm:self-auto"
-                    >
-                      {strings.resumeBtn[lang]}
-                      <ArrowRight size={14} strokeWidth={2} />
-                    </motion.button>
-                  </Card>
+
+                    <div className="grid grid-cols-3 divide-x divide-accent/20 rounded-2xl border border-accent/20 bg-surface/70">
+                      <div className="flex flex-col items-center gap-1 px-2 py-3 text-center">
+                        <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-foreground-muted">
+                          <Clock size={11} strokeWidth={1.75} />
+                          {strings.timeRemaining[lang]}
+                        </span>
+                        <span className="text-sm font-semibold">
+                          {formatTimeRemaining(activeRemainingMinutes, lang)}
+                        </span>
+                      </div>
+                      <div className="flex flex-col items-center gap-1 px-2 py-3 text-center">
+                        <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-foreground-muted">
+                          <Target size={11} strokeWidth={1.75} />
+                          {strings.todaysGoalLabel[lang]}
+                        </span>
+                        <span className="truncate text-sm font-semibold">{dailyMissionText}</span>
+                      </div>
+                      <div className="flex flex-col items-center gap-1 px-2 py-3 text-center">
+                        <span className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-foreground-muted">
+                          <Flame size={11} strokeWidth={1.75} className="text-foreground-muted" />
+                          {strings.streak[lang]}
+                        </span>
+                        <span className="text-sm font-semibold">{streakDays}</span>
+                      </div>
+                    </div>
+                  </div>
                 </Section>
               )}
 
-              {/* Medium priority row */}
-              <Section index={3} className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                <Card>
-                  <CardTitle icon={CalendarClock}>{strings.examCountdown[lang]}</CardTitle>
-                  {remaining !== null ? (
-                    <>
-                      <div className="flex items-baseline gap-1.5">
-                        <span className="text-3xl font-semibold tracking-tight text-accent">
-                          {Math.max(remaining, 0)}
-                        </span>
-                        <span className="text-sm text-foreground-muted">{strings.daysLeft[lang]}</span>
-                      </div>
-                      {remaining >= 0 && (
-                        <motion.button
-                          whileTap={{ scale: 0.95 }}
-                          onClick={() => onNavigate("chat")}
-                          className="mt-3 rounded-lg border border-warning/40 bg-warning/10 px-3 py-1.5 text-xs font-medium text-warning"
-                        >
-                          {strings.startCrashMode[lang]}
-                        </motion.button>
-                      )}
-                    </>
-                  ) : (
-                    <EmptyState
-                      icon={CalendarClock}
-                      title={strings.noExamDateYet[lang]}
-                      description={strings.examDateEmptyDesc[lang]}
-                      ctaLabel={strings.setExamDateBtn[lang]}
-                      onCtaClick={() => onNavigate("setup")}
-                      compact
-                    />
-                  )}
-                </Card>
-
+              {/* Daily Mission — an action for the day, distinct from the chapter name shown above */}
+              <Section index={2}>
                 <Card>
                   <CardTitle icon={Target}>{strings.dailyMission[lang]}</CardTitle>
-                  <p className="text-sm font-medium">{dailyMission.title[lang]}</p>
-                  <p className="mt-1 text-xs text-foreground-muted">{dailyMission.subtitle[lang]}</p>
+                  <p className="text-sm font-medium">{dailyMissionText}</p>
                   <p className="mt-3 text-xs text-foreground-muted">{strings.dailyMissionSubtext[lang]}</p>
                 </Card>
+              </Section>
 
+              <GroupHeading index={3}>{strings.hubProgress[lang]}</GroupHeading>
+
+              {/* Weekly Progress */}
+              <Section index={3}>
                 <Card>
                   <CardTitle icon={BarChart3}>{strings.weeklyProgress[lang]}</CardTitle>
-                  <div className="flex h-16 items-end justify-between gap-1.5">
+                  <div className="flex items-end justify-between gap-1.5">
                     {weeklyMinutes.map((minutes, i) => (
-                      <div key={i} className="flex flex-1 flex-col items-center gap-1.5">
-                        <div className="flex h-12 w-full items-end rounded-md bg-surface-muted">
+                      <div key={i} className="flex flex-1 flex-col items-center gap-2.5">
+                        <div className="flex h-32 w-full items-end rounded-xl bg-surface-muted">
                           <motion.div
                             title={`${weekdayShort[i][lang]}: ${minutes} ${strings.minutesShort[lang]}`}
-                            className="w-full rounded-t-md bg-accent"
+                            className="w-full rounded-t-xl bg-accent"
                             initial={{ height: 0 }}
                             animate={{ height: `${maxMinutes ? (minutes / maxMinutes) * 100 : 0}%` }}
                             transition={{ duration: 0.4, delay: 0.15 + i * 0.03, ease: EASE }}
                           />
                         </div>
-                        <span className="text-[10px] text-foreground-muted">{weekdayShort[i][lang]}</span>
+                        <span className="text-sm text-foreground-muted">{weekdayShort[i][lang]}</span>
                       </div>
                     ))}
                   </div>
                 </Card>
               </Section>
 
-              {/* AI Recommendations */}
+              {/* Subject Progress */}
               <Section index={4}>
-                <AiRecommendationStrip
-                  lang={lang}
-                  subjects={subjects}
-                  streakDays={streakDays}
-                  onAction={() => onNavigate("chat")}
-                />
-              </Section>
-
-              {/* Subject Progress — gradient cards */}
-              <Section index={5}>
                 <div className="mb-3 flex items-center justify-between">
                   <p className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
                     {strings.subjectProgress[lang]}
@@ -585,7 +524,7 @@ export function ProgressView({
               </Section>
 
               {/* Achievements */}
-              <Section index={6}>
+              <Section index={5}>
                 <AchievementsSection
                   lang={lang}
                   subjects={subjects}
@@ -594,91 +533,103 @@ export function ProgressView({
                 />
               </Section>
 
-              {/* Collapsible details */}
-              <Section index={7}>
-                <motion.button
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => setDetailsOpen((o) => !o)}
-                  className="flex w-full items-center justify-between rounded-xl border border-border bg-surface px-4 py-3 text-left transition-colors hover:bg-surface-muted"
-                >
-                  <span className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
-                    {strings.moreDetails[lang]}
-                  </span>
-                  <ChevronDown
-                    size={16}
-                    strokeWidth={1.75}
-                    className={`text-foreground-muted transition-transform duration-200 ${
-                      detailsOpen ? "rotate-180" : ""
-                    }`}
-                  />
-                </motion.button>
+              <GroupHeading index={6}>{strings.hubNeedsAttention[lang]}</GroupHeading>
 
-                <div
-                  className={`grid transition-[grid-template-rows] duration-300 ${
-                    detailsOpen ? "grid-rows-[1fr]" : "grid-rows-[0fr]"
-                  }`}
-                  style={{ transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)" }}
-                >
-                  <div className="overflow-hidden">
-                    <div className="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-3">
-                      <Card>
-                        <CardTitle icon={TrendingDown}>{strings.weakTopics[lang]}</CardTitle>
-                        {weakSubjects.length === 0 ? (
-                          <EmptyState
-                            icon={TrendingDown}
-                            title={strings.noWeakTopicsYet[lang]}
-                            description={strings.weakTopicsEmptyDesc[lang]}
-                            ctaLabel={strings.addWeakTopicsBtn[lang]}
-                            onCtaClick={() => onNavigate("setup")}
-                            compact
-                          />
-                        ) : (
-                          <div className="flex flex-wrap gap-1.5">
-                            {weakSubjects.map((s) => (
-                              <span
-                                key={s.id}
-                                className="rounded-full border border-warning/40 bg-warning/10 px-3 py-1 text-xs text-warning"
-                              >
+              {/* AI Recommendations */}
+              <Section index={6}>
+                <AiRecommendationStrip
+                  lang={lang}
+                  subjects={subjects}
+                  streakDays={streakDays}
+                  onAction={() => onNavigate("chat")}
+                />
+              </Section>
+
+              {/* Weak Topics */}
+              <Section index={7}>
+                <Card>
+                  <CardTitle icon={TrendingDown}>{strings.weakTopics[lang]}</CardTitle>
+                  {weakSubjects.length === 0 ? (
+                    <EmptyState
+                      icon={TrendingDown}
+                      title={strings.noWeakTopicsYet[lang]}
+                      description={strings.weakTopicsEmptyDesc[lang]}
+                      ctaLabel={strings.addWeakTopicsBtn[lang]}
+                      onCtaClick={() => onNavigate("setup")}
+                      compact
+                    />
+                  ) : (
+                    <div className="flex flex-col gap-3">
+                      {weakSubjects.map((s) => {
+                        const topic = getSubjectNextChapterLabel(s, lang);
+                        return (
+                          <div key={s.id} className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <span className="inline-block rounded-full border border-border bg-surface-muted px-2.5 py-1 text-xs font-medium text-foreground">
                                 {s.name[lang]}
                               </span>
-                            ))}
-                          </div>
-                        )}
-                      </Card>
-
-                      <Card>
-                        <CardTitle icon={CalendarDays}>{strings.upcomingExams[lang]}</CardTitle>
-                        <div className="flex flex-col gap-2.5">
-                          {upcomingExams.map((exam, i) => (
-                            <div key={i} className="flex items-center justify-between text-sm">
-                              <span className="truncate">{exam.subject[lang]}</span>
-                              <span className="shrink-0 text-xs text-foreground-muted">{exam.date[lang]}</span>
+                              {topic && <p className="mt-1.5 truncate text-sm font-medium">{topic}</p>}
                             </div>
-                          ))}
-                        </div>
-                      </Card>
-
-                      <Card>
-                        <CardTitle icon={History}>{strings.recentActivity[lang]}</CardTitle>
-                        <div className="flex flex-col gap-2.5">
-                          {recentThreads.map((thread) => (
-                            <button
-                              key={thread.id}
-                              onClick={() => onOpenChat(thread.id)}
-                              className="flex items-center justify-between gap-2 text-left text-sm hover:text-accent"
-                            >
-                              <span className="truncate">{thread.title[lang]}</span>
-                              <span className="shrink-0 text-xs text-foreground-muted">
-                                {thread.group === "today" ? strings.today[lang] : strings.yesterday[lang]}
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      </Card>
+                            <span className="shrink-0 text-xs text-foreground-faint">
+                              {strings.statusNeedsRevision[lang]}
+                            </span>
+                          </div>
+                        );
+                      })}
                     </div>
-                  </div>
-                </div>
+                  )}
+                </Card>
               </Section>
+
+              <GroupHeading index={8}>{strings.hubUpcoming[lang]}</GroupHeading>
+
+              {/* Exam countdown + upcoming exams */}
+              <Section index={8} className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <Card>
+                  <CardTitle icon={CalendarClock}>{strings.examCountdown[lang]}</CardTitle>
+                  {remaining !== null ? (
+                    <>
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-3xl font-semibold tracking-tight text-foreground-strong">
+                          {Math.max(remaining, 0)}
+                        </span>
+                        <span className="text-sm text-foreground-muted">{strings.daysLeft[lang]}</span>
+                      </div>
+                      {remaining >= 0 && (
+                        <motion.button
+                          whileTap={{ scale: 0.95 }}
+                          onClick={() => onNavigate("panicRevision")}
+                          className="mt-3 self-start rounded-lg bg-accent px-3 py-1.5 text-xs font-medium text-accent-foreground"
+                        >
+                          {strings.startCrashMode[lang]}
+                        </motion.button>
+                      )}
+                    </>
+                  ) : (
+                    <EmptyState
+                      icon={CalendarClock}
+                      title={strings.noExamDateYet[lang]}
+                      description={strings.examDateEmptyDesc[lang]}
+                      ctaLabel={strings.setExamDateBtn[lang]}
+                      onCtaClick={() => onNavigate("setup")}
+                      compact
+                    />
+                  )}
+                </Card>
+
+                <Card>
+                  <CardTitle icon={CalendarDays}>{strings.upcomingExams[lang]}</CardTitle>
+                  <div className="flex flex-col gap-2.5">
+                    {upcomingExams.map((exam, i) => (
+                      <div key={i} className="flex items-center justify-between text-sm">
+                        <span className="truncate">{exam.subject[lang]}</span>
+                        <span className="shrink-0 text-xs text-foreground-muted">{exam.date[lang]}</span>
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              </Section>
+
             </motion.div>
           )}
         </AnimatePresence>

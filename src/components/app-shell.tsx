@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { Menu, PanelLeftOpen } from "lucide-react";
 import { Sidebar, BrandMark, type CanvasView } from "@/components/sidebar";
@@ -23,13 +23,67 @@ import { defaultCountdowns, getMainCountdown, type Countdown } from "@/lib/count
 import { MainCountdownStrip } from "@/components/main-countdown-strip";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
+const SIDEBAR_COLLAPSED_KEY = "arindoms-ai-sidebar-collapsed";
+const SIDEBAR_WIDTH_KEY = "arindoms-ai-sidebar-width";
+const SIDEBAR_DEFAULT_WIDTH = 288; // 18rem, the original fixed w-72
+const SIDEBAR_MIN_WIDTH = 240;
+const SIDEBAR_MAX_WIDTH = 420;
+const SIDEBAR_COLLAPSE_DRAG_THRESHOLD = 160; // release below this width while resizing -> collapse
+const SIDEBAR_REVEAL_DRAG_THRESHOLD = 96; // px dragged right from the edge -> release opens
+const SIDEBAR_MIN_DRAG_WIDTH = 40; // visual floor while actively dragging toward collapse
+
+function loadSidebarCollapsed(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function loadSidebarWidth(): number {
+  if (typeof window === "undefined") return SIDEBAR_DEFAULT_WIDTH;
+  try {
+    const raw = Number(localStorage.getItem(SIDEBAR_WIDTH_KEY));
+    if (Number.isFinite(raw) && raw >= SIDEBAR_MIN_WIDTH && raw <= SIDEBAR_MAX_WIDTH) return raw;
+  } catch {
+    // storage unavailable — fall back to the default below
+  }
+  return SIDEBAR_DEFAULT_WIDTH;
+}
 
 export function AppShell() {
   const [lang, setLang] = useState<Lang>("en");
   const [view, setView] = useState<CanvasView>("chat");
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsedState] = useState(() => loadSidebarCollapsed());
+  const setSidebarCollapsed = (collapsed: boolean) => {
+    setSidebarCollapsedState(collapsed);
+    try {
+      localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+    } catch {
+      // storage unavailable — preference just won't persist across reloads
+    }
+  };
+  const [sidebarWidth, setSidebarWidthState] = useState(() => loadSidebarWidth());
+  const setSidebarWidth = (width: number) => {
+    setSidebarWidthState(width);
+    try {
+      localStorage.setItem(SIDEBAR_WIDTH_KEY, String(width));
+    } catch {
+      // storage unavailable — preference just won't persist across reloads
+    }
+  };
+  // Live drag state — width/offset are tracked outside React's transition
+  // system so the sidebar follows the cursor 1:1 while dragging; the normal
+  // CSS transition only re-engages once the pointer is released.
+  const [isResizing, setIsResizing] = useState(false);
+  const [dragWidth, setDragWidth] = useState<number | null>(null);
+  const [isRevealing, setIsRevealing] = useState(false);
+  const [revealOffset, setRevealOffset] = useState(0);
+  const isDraggingSidebar = isResizing || isRevealing;
+  const asideWidth = isResizing && dragWidth !== null ? dragWidth : sidebarWidth;
   const [studySessionActive, setStudySessionActive] = useState(false);
   const [chatLanguage, setChatLanguageState] = useState<ChatLanguage>(() => loadChatLanguage());
   const setChatLanguage = (value: ChatLanguage) => {
@@ -74,6 +128,9 @@ export function AppShell() {
                   status: "not-started" as const,
                   progress: 0,
                   estimatedMinutes: estimatedMinutes && estimatedMinutes > 0 ? estimatedMinutes : undefined,
+                  // Hand-typed via Add Chapter, so it's not part of the seeded
+                  // NCTB syllabus — kept visually distinct rather than blended in.
+                  source: "custom" as const,
                 },
               ],
             }
@@ -100,6 +157,10 @@ export function AppShell() {
           : s
       )
     );
+  // Every call to setChapterStatus originates from a direct student action
+  // (the status control, or Reset Progress below) — there is no automated
+  // path that can overwrite it, so tagging it "manual" here is always
+  // accurate and, by construction, a manual choice always wins.
   const setChapterStatus = (subjectId: string, chapterId: string, status: ChapterStatus) =>
     setSubjects((prev) =>
       prev.map((s) =>
@@ -119,6 +180,7 @@ export function AppShell() {
                           : c.progress > 0 && c.progress < 100
                           ? c.progress
                           : 50,
+                      progressSource: "manual" as const,
                     }
                   : c
               ),
@@ -128,6 +190,22 @@ export function AppShell() {
     );
   const reorderChapters = (subjectId: string, reordered: Chapter[]) =>
     setSubjects((prev) => prev.map((s) => (s.id === subjectId ? { ...s, chapters: reordered } : s)));
+  const resetSubjectProgress = (subjectId: string) =>
+    setSubjects((prev) =>
+      prev.map((s) =>
+        s.id === subjectId
+          ? {
+              ...s,
+              chapters: s.chapters.map((c) => ({
+                ...c,
+                status: "not-started" as const,
+                progress: 0,
+                progressSource: "manual" as const,
+              })),
+            }
+          : s
+      )
+    );
 
   const [countdowns, setCountdowns] = useState<Countdown[]>(defaultCountdowns);
   const mainCountdown = getMainCountdown(countdowns);
@@ -174,6 +252,70 @@ export function AppShell() {
     setHistoryOpen(false);
   };
 
+  // Drag the sidebar's right edge to resize it, or drag it far enough left to
+  // collapse it. Width tracks the pointer directly (no transition) while the
+  // drag is active; releasing snaps it via the normal CSS transition.
+  const startResize = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = sidebarWidth;
+    setIsResizing(true);
+    const handleMove = (ev: PointerEvent) => {
+      const next = startWidth + (ev.clientX - startX);
+      setDragWidth(Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_DRAG_WIDTH, next)));
+    };
+    const handleUp = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      const finalWidth = startWidth + (ev.clientX - startX);
+      setIsResizing(false);
+      setDragWidth(null);
+      if (finalWidth < SIDEBAR_COLLAPSE_DRAG_THRESHOLD) {
+        setSidebarCollapsed(true);
+      } else {
+        setSidebarWidth(Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, finalWidth)));
+      }
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp, { once: true });
+  };
+
+  // Drag from the collapsed left edge toward the right to peek/reveal the
+  // sidebar; release past the threshold to open it, otherwise it snaps shut.
+  const startReveal = (e: React.PointerEvent) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    setIsRevealing(true);
+    const handleMove = (ev: PointerEvent) => {
+      setRevealOffset(Math.min(Math.max(0, ev.clientX - startX), sidebarWidth));
+    };
+    const handleUp = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", handleMove);
+      window.removeEventListener("pointerup", handleUp);
+      const delta = ev.clientX - startX;
+      setIsRevealing(false);
+      setRevealOffset(0);
+      if (delta > SIDEBAR_REVEAL_DRAG_THRESHOLD) setSidebarCollapsed(false);
+    };
+    window.addEventListener("pointermove", handleMove);
+    window.addEventListener("pointerup", handleUp, { once: true });
+  };
+
+  // Mobile drawer: Esc closes it, and the page behind it can't scroll while open.
+  useEffect(() => {
+    if (!historyOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setHistoryOpen(false);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [historyOpen]);
+
   return (
     <MotionConfig reducedMotion="user">
       <AnimatePresence>
@@ -187,31 +329,54 @@ export function AppShell() {
         )}
       </AnimatePresence>
       {!studySessionActive && (
-    <div className="min-h-dvh">
+    <div className="min-h-dvh" style={{ "--sidebar-w": `${asideWidth}px` } as React.CSSProperties}>
       <aside
-        className={`fixed inset-y-0 left-0 z-10 hidden overflow-hidden border-border bg-sidebar transition-[width,border-color] duration-300 ease-in-out md:flex md:flex-col ${
-          sidebarCollapsed ? "md:w-0 md:border-r-0" : "md:w-72 md:border-r"
+        style={{
+          width: asideWidth,
+          transform: sidebarCollapsed
+            ? isRevealing
+              ? `translateX(${revealOffset - asideWidth}px)`
+              : "translateX(-100%)"
+            : "translateX(0)",
+        }}
+        className={`fixed inset-y-0 left-0 z-10 hidden border-r border-border bg-sidebar md:block ${
+          isDraggingSidebar ? "" : "transition-[transform,width] duration-300 ease-out"
         }`}
       >
-        <div className="flex h-full w-72 shrink-0 flex-col overflow-y-auto overflow-x-hidden">
-          <Sidebar
-            lang={lang}
-            onToggleLang={toggleLang}
-            view={view}
-            activeChatId={activeChatId}
-            onSelectView={selectView}
-            onSelectChat={selectChat}
-            onNewChat={newChat}
-            onCollapse={() => setSidebarCollapsed(true)}
-            studentName={studentName}
-            studentClassLabel={studentClassLabel}
-            plan={plan}
-            chatLanguage={chatLanguage}
-            onChangeChatLanguage={setChatLanguage}
-            mainCountdown={mainCountdown}
+        <Sidebar
+          lang={lang}
+          onToggleLang={toggleLang}
+          view={view}
+          activeChatId={activeChatId}
+          onSelectView={selectView}
+          onSelectChat={selectChat}
+          onNewChat={newChat}
+          onCollapse={() => setSidebarCollapsed(true)}
+          studentName={studentName}
+          studentClassLabel={studentClassLabel}
+          plan={plan}
+          chatLanguage={chatLanguage}
+          onChangeChatLanguage={setChatLanguage}
+          mainCountdown={mainCountdown}
+        />
+        {!sidebarCollapsed && (
+          <div
+            onPointerDown={startResize}
+            aria-hidden
+            className="absolute inset-y-0 -right-0.5 z-10 w-1.5 cursor-col-resize touch-none select-none"
           />
-        </div>
+        )}
       </aside>
+
+      {sidebarCollapsed && (
+        <div
+          onPointerDown={startReveal}
+          aria-hidden
+          className="fixed inset-y-0 left-0 z-10 hidden w-3 cursor-ew-resize touch-none select-none items-center justify-center md:flex"
+        >
+          <span className="h-16 w-1 rounded-full bg-border transition-colors duration-150 hover:bg-foreground-faint" />
+        </div>
+      )}
 
       <div
         className={`fixed left-3 top-3 z-10 hidden transition-opacity duration-300 ease-in-out md:block ${
@@ -251,13 +416,18 @@ export function AppShell() {
         </div>
       </header>
 
-      <div className="sticky top-[53px] z-20 md:hidden">
-        <MainCountdownStrip lang={lang} countdown={mainCountdown} variant="mobile" />
+      <div className="sticky top-13.25 z-20 md:hidden">
+        <MainCountdownStrip
+          lang={lang}
+          countdown={mainCountdown}
+          variant="mobile"
+          onOpenDetails={() => selectView("tools")}
+        />
       </div>
 
       <main
-        className={`pb-16 transition-[margin-left] duration-300 ease-in-out md:pb-0 ${
-          sidebarCollapsed ? "md:ml-0" : "md:ml-72"
+        className={`pb-16 md:pb-0 ${isDraggingSidebar ? "" : "transition-[margin-left] duration-300 ease-out"} ${
+          sidebarCollapsed ? "md:ml-0" : "md:ml-(--sidebar-w)"
         }`}
       >
         <AnimatePresence mode="wait">
@@ -285,7 +455,6 @@ export function AppShell() {
                 plan={plan}
                 onNavigate={selectView}
                 subjects={subjects}
-                onOpenChat={selectChat}
               />
             )}
             {view === "study" && (
@@ -302,6 +471,7 @@ export function AppShell() {
                 onSetChapterStatus={setChapterStatus}
                 onSetChapterMinutes={setChapterMinutes}
                 onReorderChapters={reorderChapters}
+                onResetSubjectProgress={resetSubjectProgress}
                 onNavigate={selectView}
                 onStartSession={() => setStudySessionActive(true)}
               />
@@ -338,7 +508,7 @@ export function AppShell() {
         className={`fixed inset-0 z-50 flex md:hidden ${historyOpen ? "" : "pointer-events-none"}`}
       >
         <div
-          className={`h-full w-72 max-w-[80vw] overflow-y-auto overflow-x-hidden border-r border-border bg-sidebar transition-transform duration-300 ease-in-out ${
+          className={`h-full w-72 max-w-[80vw] overflow-hidden border-r border-border bg-sidebar transition-transform duration-300 ease-out ${
             historyOpen ? "translate-x-0" : "-translate-x-full"
           }`}
         >
@@ -359,7 +529,7 @@ export function AppShell() {
           />
         </div>
         <button
-          className={`flex-1 bg-black/40 transition-opacity duration-300 ease-in-out ${
+          className={`flex-1 bg-black/40 transition-opacity duration-300 ease-out ${
             historyOpen ? "opacity-100" : "opacity-0"
           }`}
           onClick={() => setHistoryOpen(false)}

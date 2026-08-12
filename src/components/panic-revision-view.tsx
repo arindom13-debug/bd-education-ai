@@ -87,8 +87,11 @@ export function PanicRevisionView({
             <Zap size={24} strokeWidth={1.75} />
           </div>
           <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
+              {strings.panicKicker[lang]}
+            </p>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground-strong">{strings.panicBtn[lang]}</h1>
-            <p className="text-sm text-foreground-muted">{strings.panicPageTagline[lang]}</p>
+            <p className="max-w-md text-sm text-foreground-muted">{strings.panicPageTagline[lang]}</p>
           </div>
         </div>
 

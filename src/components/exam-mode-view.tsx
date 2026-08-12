@@ -93,8 +93,11 @@ export function ExamModeView({
           <div className="flex size-14 items-center justify-center rounded-2xl bg-accent-soft text-accent">
             <GraduationCap size={28} strokeWidth={1.75} />
           </div>
+          <p className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
+            {strings.examModeKicker[lang]}
+          </p>
           <h1 className="text-2xl font-semibold tracking-tight text-foreground-strong">{strings.examModeBtn[lang]}</h1>
-          <p className="text-sm text-foreground-muted">{strings.examModeTagline[lang]}</p>
+          <p className="max-w-md text-sm text-foreground-muted">{strings.examModeTagline[lang]}</p>
         </div>
 
         {/* Tier 1 — exam identity, live countdown, single primary action */}

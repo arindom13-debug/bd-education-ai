@@ -12,6 +12,7 @@ import {
   RotateCcw,
   Sparkles,
   BookOpenCheck,
+  MoreHorizontal,
 } from "lucide-react";
 import { AnimatedProgressBar } from "@/components/animated-progress-bar";
 import { CircularProgress } from "@/components/circular-progress";
@@ -24,6 +25,7 @@ import {
   getSubjectChaptersCompleted,
   getSubjectTotalChapters,
   getNextRecommendedChapter,
+  getUpNextChapter,
   getChapterRecommendation,
   isChapterComplete,
   streakDays,
@@ -187,14 +189,18 @@ function ChapterStatusControl({
 }
 
 /** The small secondary line under a chapter's name — status word first,
- * "Recommended" folded in only when relevant, per-status color. */
+ * "Recommended" folded in only when relevant, per-status color. Completed
+ * chapters also get a subtle provenance note so the student can see why the
+ * system considers it done. */
 function ChapterStatusWord({
   status,
   isRecommended,
+  progressSource,
   lang,
 }: {
   status: ChapterStatus;
   isRecommended: boolean;
+  progressSource?: "ai" | "manual";
   lang: Lang;
 }) {
   const colorClass =
@@ -216,16 +222,23 @@ function ChapterStatusWord({
       : strings.startTopicBtn[lang];
 
   return (
-    <span className={`flex items-center gap-1 text-xs transition-colors duration-150 ${colorClass}`}>
-      {isRecommended && status !== "mastered" && (
-        <>
-          <Sparkles size={9} strokeWidth={2} />
-          {strings.recommendedLabel[lang]}
-          <span aria-hidden>·</span>
-        </>
+    <span className="flex flex-col items-start gap-0.5">
+      <span className={`flex items-center gap-1 text-xs transition-colors duration-150 ${colorClass}`}>
+        {isRecommended && status !== "mastered" && (
+          <>
+            <Sparkles size={9} strokeWidth={2} />
+            {strings.recommendedLabel[lang]}
+            <span aria-hidden>·</span>
+          </>
+        )}
+        {verb}
+        {status !== "mastered" && <ArrowRight size={10} strokeWidth={2} />}
+      </span>
+      {status === "mastered" && progressSource && (
+        <span className="text-[10px] text-foreground-faint">
+          {progressSource === "ai" ? strings.viaAiLearningLabel[lang] : strings.markedManuallyLabel[lang]}
+        </span>
       )}
-      {verb}
-      {status !== "mastered" && <ArrowRight size={10} strokeWidth={2} />}
     </span>
   );
 }
@@ -310,12 +323,19 @@ function ChapterRow({
 
       <div className="min-w-0 flex-1">
         <div className="flex items-baseline justify-between gap-3">
-          <InlineEditableText
-            value={chapter.name[lang]}
-            onSave={onRename}
-            onEditingChange={setIsEditingText}
-            className={`truncate text-sm ${chapter.status === "mastered" ? "text-foreground-muted line-through" : ""}`}
-          />
+          <div className="flex min-w-0 items-baseline gap-1.5">
+            <InlineEditableText
+              value={chapter.name[lang]}
+              onSave={onRename}
+              onEditingChange={setIsEditingText}
+              className={`truncate text-sm ${chapter.status === "mastered" ? "text-foreground-muted line-through" : ""}`}
+            />
+            {chapter.source === "custom" && (
+              <span className="shrink-0 rounded border border-border px-1 py-px text-[9px] font-medium uppercase tracking-wide text-foreground-faint">
+                {strings.customTopicLabel[lang]}
+              </span>
+            )}
+          </div>
           {editingMinutes ? (
             <input
               autoFocus
@@ -348,7 +368,12 @@ function ChapterRow({
           )}
         </div>
         <button onClick={onNavigateChat} className="group mt-0.5">
-          <ChapterStatusWord status={chapter.status} isRecommended={isRecommended} lang={lang} />
+          <ChapterStatusWord
+            status={chapter.status}
+            isRecommended={isRecommended}
+            progressSource={chapter.progressSource}
+            lang={lang}
+          />
         </button>
       </div>
 
@@ -446,6 +471,113 @@ function AddChapterForm({
   );
 }
 
+/** Subject-level "⋯" menu — consolidates Edit progress / Reset progress /
+ * Remove subject into one place instead of scattering buttons across the
+ * row; destructive actions require an inline confirm step before they fire. */
+function SubjectMenu({
+  lang,
+  onEditProgress,
+  onResetProgress,
+  onRemoveSubject,
+}: {
+  lang: Lang;
+  onEditProgress: () => void;
+  onResetProgress: () => void;
+  onRemoveSubject: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [confirming, setConfirming] = useState<"reset" | "remove" | null>(null);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setConfirming(null);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [open]);
+
+  const close = () => {
+    setOpen(false);
+    setConfirming(null);
+  };
+
+  return (
+    <div ref={ref} className="relative shrink-0">
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          setOpen((o) => !o);
+        }}
+        aria-label="Subject options"
+        className="rounded p-1 text-foreground-faint opacity-0 transition-opacity duration-150 hover:text-foreground group-hover:opacity-100 focus-visible:opacity-100"
+      >
+        <MoreHorizontal size={14} strokeWidth={1.75} />
+      </button>
+      {open && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="absolute right-0 top-full z-10 mt-1.5 w-48 overflow-hidden rounded-lg border border-border bg-surface py-1 shadow-md"
+        >
+          {confirming ? (
+            <div className="px-3 py-2.5">
+              <p className="text-xs text-foreground-muted">
+                {confirming === "reset" ? strings.resetProgressConfirm[lang] : strings.removeSubjectConfirm[lang]}
+              </p>
+              <div className="mt-2 flex gap-1.5">
+                <button
+                  onClick={() => {
+                    if (confirming === "reset") onResetProgress();
+                    else onRemoveSubject();
+                    close();
+                  }}
+                  className="rounded-md bg-danger px-2.5 py-1 text-[11px] font-medium text-white"
+                >
+                  {strings.confirmBtn[lang]}
+                </button>
+                <button
+                  onClick={() => setConfirming(null)}
+                  className="rounded-md border border-border px-2.5 py-1 text-[11px] text-foreground-muted hover:text-foreground"
+                >
+                  {strings.cancelBtn[lang]}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={() => {
+                  onEditProgress();
+                  close();
+                }}
+                className="flex w-full items-center px-3 py-1.5 text-left text-xs text-foreground-muted transition-colors duration-150 hover:bg-surface-muted hover:text-foreground"
+              >
+                {strings.editProgressLabel[lang]}
+              </button>
+              <button
+                onClick={() => setConfirming("reset")}
+                className="flex w-full items-center px-3 py-1.5 text-left text-xs text-foreground-muted transition-colors duration-150 hover:bg-surface-muted hover:text-foreground"
+              >
+                {strings.resetProgressLabel[lang]}
+              </button>
+              <button
+                onClick={() => setConfirming("remove")}
+                className="flex w-full items-center px-3 py-1.5 text-left text-xs text-danger transition-colors duration-150 hover:bg-surface-muted"
+              >
+                {strings.removeSubjectLabel[lang]}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SubjectRow({
   lang,
   subject,
@@ -460,6 +592,7 @@ function SubjectRow({
   onDrop,
   onRename,
   onRemove,
+  onResetProgress,
   onAddChapter,
   onRemoveChapter,
   onRenameChapter,
@@ -481,6 +614,7 @@ function SubjectRow({
   onDrop: () => void;
   onRename: (name: string) => void;
   onRemove: () => void;
+  onResetProgress: () => void;
   onAddChapter: (name: string, minutes?: number) => void;
   onRemoveChapter: (chapterId: string) => void;
   onRenameChapter: (chapterId: string, name: string) => void;
@@ -577,16 +711,14 @@ function SubjectRow({
             <p className="text-xs text-foreground-muted">
               {completedCount}/{totalCount} {strings.chaptersCompletedCount[lang]}
             </p>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onRemove();
+            <SubjectMenu
+              lang={lang}
+              onEditProgress={() => {
+                if (!isExpanded) onToggleExpand();
               }}
-              aria-label="Remove subject"
-              className="shrink-0 p-1 text-foreground-faint opacity-0 transition-opacity duration-150 hover:text-danger group-hover:opacity-100 focus-visible:opacity-100"
-            >
-              <Trash2 size={13} strokeWidth={1.75} />
-            </button>
+              onResetProgress={onResetProgress}
+              onRemoveSubject={onRemove}
+            />
           </div>
         </div>
         <ChevronDown
@@ -819,6 +951,7 @@ export function StudyView({
   onSetChapterStatus,
   onSetChapterMinutes,
   onReorderChapters,
+  onResetSubjectProgress,
   onNavigate,
   onStartSession,
 }: {
@@ -834,6 +967,7 @@ export function StudyView({
   onSetChapterStatus: (subjectId: string, chapterId: string, status: ChapterStatus) => void;
   onSetChapterMinutes: (subjectId: string, chapterId: string, minutes: number) => void;
   onReorderChapters: (subjectId: string, chapters: Chapter[]) => void;
+  onResetSubjectProgress: (subjectId: string) => void;
   onNavigate: (view: CanvasView) => void;
   onStartSession: () => void;
 }) {
@@ -859,7 +993,14 @@ export function StudyView({
     subjects.length === 0
       ? 0
       : Math.round(subjects.reduce((sum, s) => sum + getSubjectProgress(s), 0) / subjects.length);
-  const recommended = getNextRecommendedChapter(subjects);
+  // "Today's Session" = the current target; "Next Up" is deliberately whatever
+  // comes AFTER that, so the two cards never show the same chapter.
+  const current = getNextRecommendedChapter(subjects);
+  const next = getUpNextChapter(
+    subjects,
+    current ? { subjectId: current.subjectId, chapterId: current.chapter.id } : undefined
+  );
+  const sessionMinutes = current?.chapter.estimatedMinutes ?? todaysSessionMinutes;
 
   return (
     <div className="mx-auto flex max-w-275 flex-col gap-8 p-6 sm:p-10">
@@ -884,18 +1025,18 @@ export function StudyView({
         <p className="text-xs font-semibold uppercase tracking-wide text-foreground-muted">
           {strings.todaysSession[lang]}
         </p>
-        {recommended ? (
+        {current ? (
           <>
-            <p className="mt-4 text-sm text-foreground-muted">{recommended.subjectName[lang]}</p>
+            <p className="mt-4 text-sm text-foreground-muted">{current.subjectName[lang]}</p>
             <p className="mt-1 text-2xl font-semibold tracking-tight text-foreground-strong">
-              {recommended.chapter.name[lang]}
+              {current.chapter.name[lang]}
             </p>
           </>
         ) : (
           <p className="mt-4 text-sm text-foreground-muted">{strings.allCaughtUp[lang]}</p>
         )}
         <p className="mt-2 text-sm text-foreground-muted">
-          {todaysSessionMinutes} {strings.minutesShort[lang]}
+          {sessionMinutes} {strings.minutesShort[lang]}
         </p>
         <button
           onClick={onStartSession}
@@ -909,12 +1050,11 @@ export function StudyView({
       {/* Quick stats — compact, secondary to Today's Session */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <QuickStatCard label={strings.nextUpLabel[lang]}>
-          {recommended ? (
+          {next ? (
             <>
-              <p className="mt-1.5 truncate text-sm font-medium">{recommended.chapter.name[lang]}</p>
+              <p className="mt-1.5 truncate text-sm font-medium">{next.chapter.name[lang]}</p>
               <p className="mt-0.5 truncate text-xs text-foreground-muted">
-                {recommended.subjectName[lang]} · {recommended.chapter.estimatedMinutes ?? 20}{" "}
-                {strings.minutesShort[lang]}
+                {next.subjectName[lang]} · {next.chapter.estimatedMinutes ?? 20} {strings.minutesShort[lang]}
               </p>
             </>
           ) : (
@@ -958,6 +1098,7 @@ export function StudyView({
               onDrop={() => handleDrop(subject.id)}
               onRename={(name) => onRenameSubject(subject.id, name)}
               onRemove={() => onRemoveSubject(subject.id)}
+              onResetProgress={() => onResetSubjectProgress(subject.id)}
               onAddChapter={(name, minutes) => onAddChapter(subject.id, name, minutes)}
               onRemoveChapter={(chapterId) => onRemoveChapter(subject.id, chapterId)}
               onRenameChapter={(chapterId, name) => onRenameChapter(subject.id, chapterId, name)}

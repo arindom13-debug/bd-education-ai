@@ -204,7 +204,7 @@ export function SetupView({
         <div className="mx-auto flex max-w-xl flex-col gap-4">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground-strong">
-              {strings.studentProfileTitle[lang]}
+              {strings.learningProfile[lang]}
             </h1>
             <p className="mt-1 text-sm text-foreground-muted">{strings.studentProfileSubtitle[lang]}</p>
           </div>

@@ -3,7 +3,6 @@
 import { AnimatePresence, motion } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import {
-  Flame,
   Gauge,
   BookOpen,
   Compass,
@@ -16,7 +15,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { strings, type Lang } from "@/lib/i18n";
-import { streakDays } from "@/lib/curriculum-data";
 import { chatHistory } from "@/lib/chat-data";
 import { ProfilePanel } from "@/components/profile-panel";
 import { Tooltip } from "@/components/tooltip";
@@ -127,101 +125,110 @@ export function Sidebar({
   }, [menuOpen]);
 
   return (
-    <div className="flex min-h-full flex-col bg-sidebar">
-      {!hideHeader && (
-        <div className="flex items-center justify-between border-b border-border px-4 py-4">
-          <div className="flex items-center gap-2">
-            <BrandMark />
-            <span className="text-[15px] font-semibold tracking-tight">{strings.appName[lang]}</span>
+    <div className="flex h-full flex-col overflow-hidden bg-sidebar">
+      {/* Fixed top area — never scrolls */}
+      <div className="shrink-0">
+        {!hideHeader && (
+          <div className="flex items-center justify-between border-b border-border px-4 py-4">
+            <div className="flex items-center gap-2">
+              <BrandMark />
+              <span className="text-[15px] font-semibold tracking-tight">{strings.appName[lang]}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={onToggleLang}
+                className="rounded-md border border-border px-2 py-1 text-xs text-foreground-muted transition-colors duration-150 hover:text-foreground"
+              >
+                {lang === "en" ? "বাংলা" : "EN"}
+              </button>
+              {onCollapse && (
+                <Tooltip label={strings.collapseSidebarLabel[lang]}>
+                  <button
+                    onClick={onCollapse}
+                    aria-label="Collapse sidebar"
+                    className="rounded-md border border-border p-1.5 text-foreground-muted transition-colors duration-150 hover:text-foreground"
+                  >
+                    <PanelLeftClose size={14} strokeWidth={1.75} />
+                  </button>
+                </Tooltip>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-1.5">
-            <button
-              onClick={onToggleLang}
-              className="rounded-md border border-border px-2 py-1 text-xs text-foreground-muted transition-colors duration-150 hover:text-foreground"
-            >
-              {lang === "en" ? "বাংলা" : "EN"}
-            </button>
-            {onCollapse && (
-              <Tooltip label={strings.collapseSidebarLabel[lang]}>
-                <button
-                  onClick={onCollapse}
-                  aria-label="Collapse sidebar"
-                  className="rounded-md border border-border p-1.5 text-foreground-muted transition-colors duration-150 hover:text-foreground"
-                >
-                  <PanelLeftClose size={14} strokeWidth={1.75} />
-                </button>
-              </Tooltip>
-            )}
-          </div>
+        )}
+
+        <MainCountdownStrip
+          lang={lang}
+          countdown={mainCountdown}
+          variant="sidebar"
+          onOpenDetails={() => onSelectView("tools")}
+        />
+
+        <div className="flex flex-col gap-1 px-3 pb-2 pt-3">
+          <button
+            onClick={onNewChat}
+            className="flex items-center gap-2.5 rounded-md border border-border px-3 py-2.5 text-left text-sm font-medium transition-colors duration-150 hover:bg-surface-muted active:scale-[0.99]"
+          >
+            <Plus size={16} strokeWidth={1.75} />
+            {strings.newChat[lang]}
+          </button>
+          <NavButton
+            active={view === "progress"}
+            icon={Gauge}
+            label={strings.studentHub[lang]}
+            onClick={() => onSelectView("progress")}
+            layoutGroup={layoutGroup}
+          />
+          <NavButton
+            active={view === "study"}
+            icon={BookOpen}
+            label={strings.studyPlan[lang]}
+            onClick={() => onSelectView("study")}
+            layoutGroup={layoutGroup}
+          />
+          <NavButton
+            active={view === "tools"}
+            icon={Wrench}
+            label={strings.toolsNav[lang]}
+            onClick={() => onSelectView("tools")}
+            layoutGroup={layoutGroup}
+          />
+          <NavButton
+            active={view === "setup"}
+            icon={Compass}
+            label={strings.learningProfile[lang]}
+            onClick={() => onSelectView("setup")}
+            layoutGroup={layoutGroup}
+          />
         </div>
-      )}
 
-      <MainCountdownStrip lang={lang} countdown={mainCountdown} variant="sidebar" />
-
-      <div className="flex flex-col gap-1 px-3 pb-2 pt-3">
-        <button
-          onClick={onNewChat}
-          className="flex items-center gap-2.5 rounded-md border border-border px-3 py-2.5 text-left text-sm font-medium transition-colors duration-150 hover:bg-surface-muted active:scale-[0.99]"
-        >
-          <Plus size={16} strokeWidth={1.75} />
-          {strings.newChat[lang]}
-        </button>
-        <NavButton
-          active={view === "progress"}
-          icon={Gauge}
-          label={strings.studentHub[lang]}
-          onClick={() => onSelectView("progress")}
-          layoutGroup={layoutGroup}
-        />
-        <NavButton
-          active={view === "study"}
-          icon={BookOpen}
-          label={strings.studyPlan[lang]}
-          onClick={() => onSelectView("study")}
-          layoutGroup={layoutGroup}
-        />
-        <NavButton
-          active={view === "tools"}
-          icon={Wrench}
-          label={strings.toolsNav[lang]}
-          onClick={() => onSelectView("tools")}
-          layoutGroup={layoutGroup}
-        />
-        <NavButton
-          active={view === "setup"}
-          icon={Compass}
-          label={strings.setup[lang]}
-          onClick={() => onSelectView("setup")}
-          layoutGroup={layoutGroup}
-        />
+        <div className="flex gap-2 px-3 pb-2">
+          <button
+            onClick={() => onSelectView("examMode")}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-2 text-xs font-medium transition-colors active:scale-95 ${
+              view === "examMode"
+                ? "border-accent bg-accent text-accent-foreground"
+                : "border-accent/30 bg-accent-soft text-accent"
+            }`}
+          >
+            <GraduationCap size={14} strokeWidth={1.75} />
+            {strings.examModeBtn[lang]}
+          </button>
+          <button
+            onClick={() => onSelectView("panicRevision")}
+            className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-2 text-xs font-medium transition-colors active:scale-95 ${
+              view === "panicRevision"
+                ? "border-accent bg-accent text-accent-foreground"
+                : "border-accent/30 bg-accent-soft text-accent"
+            }`}
+          >
+            <Zap size={14} strokeWidth={1.75} />
+            {strings.panicBtn[lang]}
+          </button>
+        </div>
       </div>
 
-      <div className="flex gap-2 px-3 pb-2">
-        <button
-          onClick={() => onSelectView("examMode")}
-          className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-2 text-xs font-medium transition-colors active:scale-95 ${
-            view === "examMode"
-              ? "border-accent bg-accent text-accent-foreground"
-              : "border-accent/30 bg-accent-soft text-accent"
-          }`}
-        >
-          <GraduationCap size={14} strokeWidth={1.75} />
-          {strings.examModeBtn[lang]}
-        </button>
-        <button
-          onClick={() => onSelectView("panicRevision")}
-          className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-2 text-xs font-medium transition-colors active:scale-95 ${
-            view === "panicRevision"
-              ? "border-accent bg-accent text-accent-foreground"
-              : "border-accent/30 bg-accent-soft text-accent"
-          }`}
-        >
-          <Zap size={14} strokeWidth={1.75} />
-          {strings.panicBtn[lang]}
-        </button>
-      </div>
-
-      <div className="px-3 pb-2">
+      {/* Only this area scrolls */}
+      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden px-3 pb-2">
         {groups.map((group) => {
           const threads = chatHistory.filter((t) => t.group === group.key);
           if (threads.length === 0) return null;
@@ -250,42 +257,37 @@ export function Sidebar({
         })}
       </div>
 
-      <div className="border-t border-border px-4 py-3">
-        <div className="flex items-center gap-2 text-sm">
-          <Flame size={16} strokeWidth={1.75} className="text-warning" />
-          <span className="font-medium">{streakDays}</span>
-          <span className="text-foreground-muted">{strings.streak[lang]}</span>
+      {/* Fixed bottom area — never scrolls */}
+      <div className="shrink-0">
+        <div ref={menuRef} className="relative border-t border-border p-3">
+          <AnimatePresence>
+            {menuOpen && (
+              <ProfilePanel
+                lang={lang}
+                studentName={studentName}
+                studentClassLabel={studentClassLabel}
+                plan={plan}
+                chatLanguage={chatLanguage}
+                onChangeChatLanguage={onChangeChatLanguage}
+                onOpenSettings={() => onSelectView("setup")}
+                onClose={() => setMenuOpen(false)}
+              />
+            )}
+          </AnimatePresence>
+          <button
+            onClick={() => setMenuOpen((o) => !o)}
+            className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors duration-150 hover:bg-surface-muted"
+          >
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-medium text-accent-foreground">
+              {studentName.charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{studentName}</p>
+              <p className="truncate text-xs text-foreground-muted">{studentClassLabel}</p>
+            </div>
+            <ChevronsUpDown size={14} strokeWidth={1.75} className="shrink-0 text-foreground-muted" />
+          </button>
         </div>
-      </div>
-
-      <div ref={menuRef} className="relative border-t border-border p-3">
-        <AnimatePresence>
-          {menuOpen && (
-            <ProfilePanel
-              lang={lang}
-              studentName={studentName}
-              studentClassLabel={studentClassLabel}
-              plan={plan}
-              chatLanguage={chatLanguage}
-              onChangeChatLanguage={onChangeChatLanguage}
-              onOpenSettings={() => onSelectView("setup")}
-              onClose={() => setMenuOpen(false)}
-            />
-          )}
-        </AnimatePresence>
-        <button
-          onClick={() => setMenuOpen((o) => !o)}
-          className="flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-left transition-colors duration-150 hover:bg-surface-muted"
-        >
-          <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-medium text-accent-foreground">
-            {studentName.charAt(0).toUpperCase()}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{studentName}</p>
-            <p className="truncate text-xs text-foreground-muted">{studentClassLabel}</p>
-          </div>
-          <ChevronsUpDown size={14} strokeWidth={1.75} className="shrink-0 text-foreground-muted" />
-        </button>
       </div>
     </div>
   );

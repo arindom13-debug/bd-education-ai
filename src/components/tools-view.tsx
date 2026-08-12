@@ -17,29 +17,43 @@ import {
 } from "@/components/tool-panels";
 import { CountdownPanel } from "@/components/countdown-panel";
 
+type ToolGroup = "learn" | "practice" | "reference";
+
 const tools: {
   id: ToolId;
+  group: ToolGroup;
   icon: LucideIcon;
   title: keyof typeof strings;
   desc: keyof typeof strings;
   status: { en: string; bn: string };
 }[] = [
   {
-    id: "timer",
-    icon: Timer,
-    title: "timerTitle",
-    desc: "timerDesc",
-    status: { en: "Timer ready", bn: "টাইমার প্রস্তুত" },
-  },
-  {
     id: "notebook",
+    group: "learn",
     icon: NotebookPen,
     title: "notebookTitle",
     desc: "notebookDesc",
     status: { en: "3 active notes", bn: "৩টি সক্রিয় নোট" },
   },
   {
+    id: "roadmap",
+    group: "learn",
+    icon: Map,
+    title: "roadmapTitle",
+    desc: "roadmapDesc",
+    status: { en: "Week 2 in progress", bn: "সপ্তাহ ২ চলমান" },
+  },
+  {
+    id: "timer",
+    group: "practice",
+    icon: Timer,
+    title: "timerTitle",
+    desc: "timerDesc",
+    status: { en: "Timer ready", bn: "টাইমার প্রস্তুত" },
+  },
+  {
     id: "mistakeBook",
+    group: "practice",
     icon: AlertTriangle,
     title: "mistakeBookTitle",
     desc: "mistakeBookDesc",
@@ -47,25 +61,26 @@ const tools: {
   },
   {
     id: "library",
+    group: "reference",
     icon: Archive,
     title: "libraryTitle",
     desc: "libraryDesc",
     status: { en: "2 auto-summaries · 9 saved answers", bn: "২টি স্বয়ংক্রিয় সারাংশ · ৯টি সংরক্ষিত উত্তর" },
   },
   {
-    id: "roadmap",
-    icon: Map,
-    title: "roadmapTitle",
-    desc: "roadmapDesc",
-    status: { en: "Week 2 in progress", bn: "সপ্তাহ ২ চলমান" },
-  },
-  {
     id: "countdowns",
+    group: "reference",
     icon: CalendarClock,
     title: "countdownsTitle",
     desc: "countdownsDesc",
     status: { en: "Every deadline in one place", bn: "সব সময়সীমা এক জায়গায়" },
   },
+];
+
+const toolGroups: { key: ToolGroup; label: keyof typeof strings }[] = [
+  { key: "learn", label: "toolGroupLearn" },
+  { key: "practice", label: "toolGroupPractice" },
+  { key: "reference", label: "toolGroupReference" },
 ];
 
 function ToolPanel({
@@ -143,14 +158,14 @@ export function ToolsView({
         </div>
 
         {/* Continue where you left off */}
-        <div className="rounded-2xl border border-accent/30 bg-surface p-6">
+        <div className="rounded-2xl border border-border bg-surface p-6">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
-              <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-accent text-accent-foreground shadow-lg shadow-accent/30">
+              <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-surface-muted text-foreground-strong">
                 <continueTool.icon size={26} strokeWidth={1.75} />
               </div>
               <div className="min-w-0">
-                <p className="text-xs font-medium uppercase tracking-wide text-accent">
+                <p className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
                   {strings.continueWhereLeftOff[lang]}
                 </p>
                 <p className="mt-1 text-lg font-semibold tracking-tight">
@@ -168,44 +183,55 @@ export function ToolsView({
           </div>
         </div>
 
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          {tools.map((tool) => (
-            <div
-              key={tool.id}
-              onClick={() => setActiveTool(tool.id)}
-              className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border bg-surface p-6 transition-all duration-300 hover:-translate-y-1 hover:border-accent/30 hover:shadow-xl"
-            >
-              <div className="relative flex flex-col gap-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-foreground transition-colors duration-300 group-hover:bg-accent-soft group-hover:text-accent">
-                    <tool.icon size={22} strokeWidth={1.75} />
+        {toolGroups.map((group) => {
+          const groupTools = tools.filter((t) => t.group === group.key);
+          if (groupTools.length === 0) return null;
+          return (
+            <div key={group.key} className="flex flex-col gap-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
+                {strings[group.label][lang]}
+              </p>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {groupTools.map((tool) => (
+                  <div
+                    key={tool.id}
+                    onClick={() => setActiveTool(tool.id)}
+                    className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border bg-surface p-6 transition-colors duration-200 hover:bg-surface-muted"
+                  >
+                    <div className="relative flex flex-col gap-4">
+                      <div className="flex items-start justify-between">
+                        <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-foreground transition-colors duration-200 group-hover:text-foreground-strong">
+                          <tool.icon size={22} strokeWidth={1.75} />
+                        </div>
+                      </div>
+
+                      <div>
+                        <p className="text-base font-semibold tracking-tight">{strings[tool.title][lang]}</p>
+                        <p className="mt-1 text-sm text-foreground-muted">{strings[tool.desc][lang]}</p>
+                        <p className="mt-2.5 text-xs font-medium text-foreground-muted">{tool.status[lang]}</p>
+                      </div>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setActiveTool(tool.id);
+                        }}
+                        className="mt-1 flex items-center justify-center gap-1.5 self-start rounded-lg border border-border px-4 py-2 text-xs font-medium text-foreground-muted transition-colors duration-200 group-hover:text-foreground"
+                      >
+                        {strings.quickLaunch[lang]}
+                        <ArrowRight
+                          size={13}
+                          strokeWidth={2}
+                          className="transition-transform duration-200 group-hover:translate-x-0.5"
+                        />
+                      </button>
+                    </div>
                   </div>
-                </div>
-
-                <div>
-                  <p className="text-base font-semibold tracking-tight">{strings[tool.title][lang]}</p>
-                  <p className="mt-1 text-sm text-foreground-muted">{strings[tool.desc][lang]}</p>
-                  <p className="mt-2.5 text-xs font-medium text-foreground-muted">{tool.status[lang]}</p>
-                </div>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setActiveTool(tool.id);
-                  }}
-                  className="mt-1 flex items-center justify-center gap-1.5 self-start rounded-lg border border-border px-4 py-2 text-xs font-medium text-foreground-muted transition-colors group-hover:border-accent/50 group-hover:text-accent"
-                >
-                  {strings.quickLaunch[lang]}
-                  <ArrowRight
-                    size={13}
-                    strokeWidth={2}
-                    className="transition-transform duration-300 group-hover:translate-x-0.5"
-                  />
-                </button>
+                ))}
               </div>
             </div>
-          ))}
-        </div>
+          );
+        })}
       </div>
 
       <AnimatePresence>
