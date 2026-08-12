@@ -1,8 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Target, CalendarClock, Flame, Clock, Languages, SunMoon, Settings, LogOut } from "lucide-react";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { Target, CalendarClock, Flame, Clock, Languages, Settings, LogOut } from "lucide-react";
 import { strings, type Lang } from "@/lib/i18n";
 import { streakDays } from "@/lib/curriculum-data";
 import { daysUntil, examTargetOptions, curriculumTrackOptions, type StudyPlan } from "@/lib/study-plan";
@@ -77,9 +76,8 @@ export function ProfilePanel({
       transition={{ duration: 0.2, ease: EASE }}
       className="absolute bottom-full left-3 right-3 z-30 mb-3 origin-bottom overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl"
     >
-      <div className="relative overflow-hidden p-4">
-        <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-accent/15 via-transparent to-transparent" />
-        <div className="relative flex items-center gap-3">
+      <div className="p-4">
+        <div className="flex items-center gap-3">
           <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-accent text-base font-semibold text-accent-foreground ring-2 ring-accent/25">
             {studentName.charAt(0).toUpperCase()}
           </div>
@@ -132,16 +130,6 @@ export function ProfilePanel({
               {opt.label}
             </button>
           ))}
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-0.5 border-t border-border p-1.5">
-        <div className="flex items-center justify-between rounded-md px-2.5 py-1.5 text-sm">
-          <span className="flex items-center gap-2.5 text-foreground-muted">
-            <SunMoon size={15} strokeWidth={1.75} />
-            {strings.appearanceLabel[lang]}
-          </span>
-          <ThemeToggle />
         </div>
       </div>
 

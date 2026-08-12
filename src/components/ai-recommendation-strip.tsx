@@ -26,16 +26,12 @@ export function AiRecommendationStrip({
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, ease: EASE }}
-      className="flex w-full max-w-2xl flex-col gap-3 rounded-2xl border border-accent/30 bg-accent-soft p-4 sm:flex-row sm:items-center sm:justify-between"
+      className="flex w-full max-w-2xl flex-col gap-3 rounded-2xl border border-border bg-highlight p-4 sm:flex-row sm:items-center sm:justify-between"
     >
       <div className="flex items-start gap-3">
-        <motion.div
-          animate={{ scale: [1, 1.08, 1] }}
-          transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
-          className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-accent-foreground"
-        >
+        <div className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft text-accent">
           <Sparkles size={16} strokeWidth={1.75} />
-        </motion.div>
+        </div>
         <p className="text-sm leading-relaxed text-foreground">{message}</p>
       </div>
       <motion.button

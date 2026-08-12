@@ -12,8 +12,6 @@ import { type StudyPlan } from "@/lib/study-plan";
 import { mostImportantQuestions, lastMinuteFacts } from "@/lib/tools-data";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-const PANIC_COLOR = "#F97316";
-const PANIC_ON_COLOR = "#1f1300";
 
 const sessionPresets = [
   { minutes: 30, label: { en: "30 min", bn: "৩০ মিনিট" } },
@@ -85,24 +83,18 @@ export function PanicRevisionView({
         </button>
 
         <div className="flex items-center gap-3">
-          <div
-            className="flex size-12 shrink-0 items-center justify-center rounded-2xl"
-            style={{ backgroundColor: `${PANIC_COLOR}22`, color: PANIC_COLOR }}
-          >
+          <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-accent-soft text-accent">
             <Zap size={24} strokeWidth={1.75} />
           </div>
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">{strings.panicBtn[lang]}</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground-strong">{strings.panicBtn[lang]}</h1>
             <p className="text-sm text-foreground-muted">{strings.panicPageTagline[lang]}</p>
           </div>
         </div>
 
         {/* Tier 1 — exact countdown, available study time, one primary action */}
-        <div
-          className="rounded-2xl border p-6 text-center"
-          style={{ borderColor: `${PANIC_COLOR}44`, backgroundColor: `${PANIC_COLOR}0d` }}
-        >
-          <p className="text-xs font-semibold uppercase tracking-wide" style={{ color: PANIC_COLOR }}>
+        <div className="rounded-2xl border border-border bg-surface p-6 text-center">
+          <p className="text-xs font-semibold uppercase tracking-wide text-warning">
             {strings.timeRemainingLabel[lang]}
           </p>
           {remaining ? (
@@ -112,8 +104,7 @@ export function PanicRevisionView({
                 initial={{ opacity: 0, scale: 0.94 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.25, ease: EASE }}
-                className="flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1 tabular-nums"
-                style={{ color: PANIC_COLOR }}
+                className="flex flex-wrap items-baseline justify-center gap-x-2 gap-y-1 tabular-nums text-warning"
               >
                 <span className="text-4xl font-bold tracking-tight sm:text-5xl">{remaining.days}</span>
                 <span className="text-sm font-semibold">{strings.daysShort[lang]}</span>
@@ -130,8 +121,7 @@ export function PanicRevisionView({
 
               <button
                 onClick={() => onNavigate("chat")}
-                style={{ backgroundColor: PANIC_COLOR, color: PANIC_ON_COLOR }}
-                className="mt-5 rounded-lg px-6 py-3 text-sm font-semibold transition-transform active:scale-95"
+                className="mt-5 rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-accent-foreground transition-transform active:scale-95"
               >
                 {strings.startRescueSessionBtn[lang]}
               </button>
@@ -144,8 +134,6 @@ export function PanicRevisionView({
                 description={strings.examDateEmptyDesc[lang]}
                 ctaLabel={strings.setExamDateBtn[lang]}
                 onCtaClick={() => onNavigate("setup")}
-                accentColor={PANIC_COLOR}
-                onAccentColor={PANIC_ON_COLOR}
               />
             </div>
           )}
@@ -158,13 +146,10 @@ export function PanicRevisionView({
           </p>
           <div className="flex flex-col gap-3">
             {mustKnow.length > 0 && (
-              <div
-                className="rounded-2xl border p-4"
-                style={{ borderColor: `${PANIC_COLOR}44`, backgroundColor: `${PANIC_COLOR}0d` }}
-              >
+              <div className="rounded-2xl border border-border bg-surface p-4">
                 <div className="mb-2.5 flex items-center gap-2">
-                  <Target size={14} strokeWidth={1.75} style={{ color: PANIC_COLOR }} />
-                  <p className="text-sm font-semibold tracking-tight" style={{ color: PANIC_COLOR }}>
+                  <Target size={14} strokeWidth={1.75} className="text-warning" />
+                  <p className="text-sm font-semibold tracking-tight text-warning">
                     1. {strings.mustKnowLabel[lang]}
                   </p>
                 </div>
@@ -233,9 +218,7 @@ export function PanicRevisionView({
             <div className="flex flex-col gap-2.5">
               {mostImportantQuestions.map((q, i) => (
                 <p key={i} className="text-sm leading-snug">
-                  <span className="font-semibold" style={{ color: PANIC_COLOR }}>
-                    Q{i + 1}.
-                  </span>{" "}
+                  <span className="font-semibold text-foreground">Q{i + 1}.</span>{" "}
                   {q[lang]}
                 </p>
               ))}
@@ -295,7 +278,7 @@ export function PanicRevisionView({
           <p className="mb-3 text-xs font-medium uppercase tracking-wide text-foreground-muted">
             {strings.revisionSessions[lang]}
           </p>
-          <ModeTimer lang={lang} presets={sessionPresets} color={PANIC_COLOR} onColor={PANIC_ON_COLOR} />
+          <ModeTimer lang={lang} presets={sessionPresets} tone="warning" />
         </div>
       </div>
     </div>

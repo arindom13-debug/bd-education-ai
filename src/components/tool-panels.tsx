@@ -146,7 +146,7 @@ export function AiNotebookPanel({ lang }: { lang: Lang }) {
   return (
     <div className="flex flex-col gap-3">
       {aiNotebookEntries.map((n, i) => (
-        <div key={i} className="rounded-xl border border-accent/30 bg-accent-soft p-3.5">
+        <div key={i} className="rounded-xl border border-border bg-highlight p-3.5">
           <div className="flex items-center gap-2">
             <Sparkles size={13} strokeWidth={1.75} className="text-accent" />
             <p className="text-sm font-medium text-accent">{n.title[lang]}</p>
@@ -172,7 +172,7 @@ export function MistakeBookPanel({ lang }: { lang: Lang }) {
             {m.subject[lang]}
           </span>
           <p className="mt-2 text-sm font-medium">{m.question[lang]}</p>
-          <p className="mt-2 text-xs text-warning">
+          <p className="mt-2 text-xs text-danger">
             {strings.yourAnswer[lang]}: <span className="line-through">{m.yourAnswer[lang]}</span>
           </p>
           <p className="mt-1 text-xs text-success">

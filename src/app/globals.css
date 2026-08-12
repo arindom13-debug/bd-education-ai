@@ -1,45 +1,53 @@
 @import "tailwindcss";
 
 :root {
-  --background: #fafafa;
-  --surface: #ffffff;
-  --surface-muted: #f2f2f3;
-  --border: #e4e4e7;
-  --foreground: #18181b;
-  --foreground-muted: #71717a;
-  --accent: #2952cc;
-  --accent-foreground: #ffffff;
-  --accent-soft: #e8edfb;
-  --success: #1a7f4b;
-  --warning: #b45309;
-}
-
-.dark {
-  --background: #0b0b0d;
-  --surface: #141416;
-  --surface-muted: #1c1c1f;
-  --border: #2a2a2e;
-  --foreground: #f4f4f5;
-  --foreground-muted: #a1a1aa;
-  --accent: #6b8bf5;
-  --accent-foreground: #0b0b0d;
-  --accent-soft: #1b2542;
-  --success: #34c785;
-  --warning: #f0a742;
+  /* Premium monochrome dark system — the product's only theme. Depth comes
+     from this background→sidebar→surface→muted→control→border ladder, not
+     from color; --accent stays grayscale on purpose, leaving color reserved
+     for success/warning/danger. */
+  --background: #080808;
+  --sidebar: #0f0f0f;
+  --surface: #151515;
+  --surface-muted: #1c1c1c;
+  --control: #242424;
+  --border: #303030;
+  --foreground: #d4d4d4;
+  --foreground-strong: #f0f0f0;
+  --foreground-muted: #a3a3a3;
+  --foreground-faint: #6b6b6b;
+  --accent: #d4d4d4;
+  --accent-hover: #f0f0f0;
+  --accent-foreground: #080808;
+  --accent-soft: #1c1c1c;
+  --success: #2f8f68;
+  --progress-track: #1c2521;
+  --warning: #d89a3d;
+  --danger: #e07a73;
+  --highlight: #1c1c1c;
+  --scrollbar-thumb: #3a3a3a;
+  --scrollbar-thumb-hover: #555555;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-sidebar: var(--sidebar);
   --color-surface: var(--surface);
   --color-surface-muted: var(--surface-muted);
+  --color-control: var(--control);
   --color-border: var(--border);
   --color-foreground: var(--foreground);
+  --color-foreground-strong: var(--foreground-strong);
   --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-faint: var(--foreground-faint);
   --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent-soft: var(--accent-soft);
   --color-success: var(--success);
+  --color-progress-track: var(--progress-track);
   --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-highlight: var(--highlight);
   --font-sans: var(--font-inter), var(--font-bengali), sans-serif;
 }
 
@@ -49,12 +57,50 @@ body {
   font-family: var(--font-sans);
 }
 
+/* Native date-picker controls otherwise render with light-scheme (often
+   illegible) text/icons on our dark surfaces. */
+input[type="date"] {
+  color-scheme: dark;
+}
+
+/* Custom scrollbar — thin, transparent track, dark-gray thumb. Applied
+   globally so every scrollable surface (page, sidebar, chat history, modals,
+   etc.) matches without per-component styling. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thumb-hover);
+}
+
 /* A single, consistent keyboard-focus indicator for every interactive
    element in the app — some components remove the native outline for
    mouse/touch users without providing a replacement for keyboard users. */
 :focus-visible {
   outline: 2px solid var(--color-accent) !important;
   outline-offset: 2px;
+}
+
+/* Solid primary-action buttons darken on hover instead of relying on scale
+   transforms alone — centralizes hover feedback for the accent color role. */
+button.bg-accent:hover {
+  background-color: var(--color-accent-hover);
 }
 
 @keyframes step-in-forward {

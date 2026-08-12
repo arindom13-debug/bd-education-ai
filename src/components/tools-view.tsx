@@ -2,11 +2,12 @@
 
 import { useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { Timer, NotebookPen, AlertTriangle, Archive, Map, ArrowRight, type LucideIcon } from "lucide-react";
+import { Timer, NotebookPen, AlertTriangle, Archive, Map, CalendarClock, ArrowRight, type LucideIcon } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { strings, type Lang } from "@/lib/i18n";
 import type { ToolId } from "@/lib/tools-data";
 import { notebookEntries } from "@/lib/tools-data";
+import type { Countdown } from "@/lib/countdowns";
 import {
   StudyTimerPanel,
   NotebookPanel,
@@ -14,6 +15,7 @@ import {
   MyLibraryPanel,
   AiRoadmapPanel,
 } from "@/components/tool-panels";
+import { CountdownPanel } from "@/components/countdown-panel";
 
 const tools: {
   id: ToolId;
@@ -57,9 +59,34 @@ const tools: {
     desc: "roadmapDesc",
     status: { en: "Week 2 in progress", bn: "সপ্তাহ ২ চলমান" },
   },
+  {
+    id: "countdowns",
+    icon: CalendarClock,
+    title: "countdownsTitle",
+    desc: "countdownsDesc",
+    status: { en: "Every deadline in one place", bn: "সব সময়সীমা এক জায়গায়" },
+  },
 ];
 
-function ToolPanel({ id, lang }: { id: ToolId; lang: Lang }) {
+function ToolPanel({
+  id,
+  lang,
+  countdowns,
+  onAddCountdown,
+  onUpdateCountdown,
+  onDeleteCountdown,
+  onSetMainCountdown,
+  onReorderCountdowns,
+}: {
+  id: ToolId;
+  lang: Lang;
+  countdowns: Countdown[];
+  onAddCountdown: (draft: { name: string; targetDate: string; description?: string }) => void;
+  onUpdateCountdown: (id: string, draft: { name: string; targetDate: string; description?: string }) => void;
+  onDeleteCountdown: (id: string) => void;
+  onSetMainCountdown: (id: string) => void;
+  onReorderCountdowns: (countdowns: Countdown[]) => void;
+}) {
   switch (id) {
     case "timer":
       return <StudyTimerPanel lang={lang} />;
@@ -71,10 +98,38 @@ function ToolPanel({ id, lang }: { id: ToolId; lang: Lang }) {
       return <MyLibraryPanel lang={lang} />;
     case "roadmap":
       return <AiRoadmapPanel lang={lang} />;
+    case "countdowns":
+      return (
+        <CountdownPanel
+          lang={lang}
+          countdowns={countdowns}
+          onAdd={onAddCountdown}
+          onUpdate={onUpdateCountdown}
+          onDelete={onDeleteCountdown}
+          onSetMain={onSetMainCountdown}
+          onReorder={onReorderCountdowns}
+        />
+      );
   }
 }
 
-export function ToolsView({ lang }: { lang: Lang }) {
+export function ToolsView({
+  lang,
+  countdowns,
+  onAddCountdown,
+  onUpdateCountdown,
+  onDeleteCountdown,
+  onSetMainCountdown,
+  onReorderCountdowns,
+}: {
+  lang: Lang;
+  countdowns: Countdown[];
+  onAddCountdown: (draft: { name: string; targetDate: string; description?: string }) => void;
+  onUpdateCountdown: (id: string, draft: { name: string; targetDate: string; description?: string }) => void;
+  onDeleteCountdown: (id: string) => void;
+  onSetMainCountdown: (id: string) => void;
+  onReorderCountdowns: (countdowns: Countdown[]) => void;
+}) {
   const [activeTool, setActiveTool] = useState<ToolId | null>(null);
   const active = tools.find((t) => t.id === activeTool);
   const continueTool = tools.find((t) => t.id === "notebook")!;
@@ -83,14 +138,13 @@ export function ToolsView({ lang }: { lang: Lang }) {
     <div className="p-5 sm:p-8">
       <div className="mx-auto flex max-w-5xl flex-col gap-8">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{strings.toolsTitle[lang]}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground-strong">{strings.toolsTitle[lang]}</h1>
           <p className="mt-1 text-sm text-foreground-muted">{strings.toolsSubtitle[lang]}</p>
         </div>
 
         {/* Continue where you left off */}
-        <div className="relative overflow-hidden rounded-2xl border border-accent/30 bg-surface p-6">
-          <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-accent/15 via-transparent to-transparent" />
-          <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+        <div className="rounded-2xl border border-accent/30 bg-surface p-6">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
               <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-accent text-accent-foreground shadow-lg shadow-accent/30">
                 <continueTool.icon size={26} strokeWidth={1.75} />
@@ -123,7 +177,7 @@ export function ToolsView({ lang }: { lang: Lang }) {
             >
               <div className="relative flex flex-col gap-4">
                 <div className="flex items-start justify-between">
-                  <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground transition-transform duration-300 group-hover:scale-110">
+                  <div className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-surface-muted text-foreground transition-colors duration-300 group-hover:bg-accent-soft group-hover:text-accent">
                     <tool.icon size={22} strokeWidth={1.75} />
                   </div>
                 </div>
@@ -131,7 +185,7 @@ export function ToolsView({ lang }: { lang: Lang }) {
                 <div>
                   <p className="text-base font-semibold tracking-tight">{strings[tool.title][lang]}</p>
                   <p className="mt-1 text-sm text-foreground-muted">{strings[tool.desc][lang]}</p>
-                  <p className="mt-2.5 text-xs font-medium text-accent">{tool.status[lang]}</p>
+                  <p className="mt-2.5 text-xs font-medium text-foreground-muted">{tool.status[lang]}</p>
                 </div>
 
                 <button
@@ -157,7 +211,16 @@ export function ToolsView({ lang }: { lang: Lang }) {
       <AnimatePresence>
         {active && (
           <Modal title={strings[active.title][lang]} onClose={() => setActiveTool(null)}>
-            <ToolPanel id={active.id} lang={lang} />
+            <ToolPanel
+              id={active.id}
+              lang={lang}
+              countdowns={countdowns}
+              onAddCountdown={onAddCountdown}
+              onUpdateCountdown={onUpdateCountdown}
+              onDeleteCountdown={onDeleteCountdown}
+              onSetMainCountdown={onSetMainCountdown}
+              onReorderCountdowns={onReorderCountdowns}
+            />
           </Modal>
         )}
       </AnimatePresence>

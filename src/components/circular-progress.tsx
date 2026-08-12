@@ -29,7 +29,7 @@ export function CircularProgress({
           cy={size / 2}
           r={radius}
           strokeWidth={strokeWidth}
-          className="stroke-surface-muted"
+          className="stroke-progress-track"
           fill="none"
         />
         <motion.circle

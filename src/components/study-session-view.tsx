@@ -11,6 +11,7 @@ import {
   MessageSquare,
   NotebookText,
   BarChart3,
+  CheckCircle2,
 } from "lucide-react";
 import { AnimatedProgressBar } from "@/components/animated-progress-bar";
 import { CircularProgress } from "@/components/circular-progress";
@@ -124,7 +125,7 @@ function SessionChat({ lang, chapterLabel }: { lang: Lang; chapterLabel: string 
           }}
           rows={1}
           placeholder={strings.chatPlaceholder[lang]}
-          className="max-h-32 flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm outline-none placeholder:text-foreground-muted focus:border-accent"
+          className="max-h-32 flex-1 resize-none rounded-xl border border-border bg-control px-3 py-2 text-sm outline-none placeholder:text-foreground-faint focus:border-accent"
         />
         <button
           onClick={handleSend}
@@ -180,10 +181,12 @@ export function StudySessionView({
   lang,
   subjects,
   onEnd,
+  onFinish,
 }: {
   lang: Lang;
   subjects: Subject[];
   onEnd: () => void;
+  onFinish?: (subjectId: string, chapterId: string) => void;
 }) {
   const [tab, setTab] = useState<SessionTab>("chat");
   const recommended = getNextRecommendedChapter(subjects);
@@ -220,16 +223,33 @@ export function StudySessionView({
             </p>
           </div>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.96 }}
-          transition={{ duration: 0.15 }}
-          onClick={onEnd}
-          className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground-muted transition-colors hover:border-warning/50 hover:text-warning"
-        >
-          <X size={15} strokeWidth={1.75} />
-          {strings.endSessionBtn[lang]}
-        </motion.button>
+        <div className="flex shrink-0 items-center gap-2">
+          {recommended && onFinish && (
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.96 }}
+              transition={{ duration: 0.15 }}
+              onClick={() => {
+                onFinish(recommended.subjectId, recommended.chapter.id);
+                onEnd();
+              }}
+              className="flex items-center gap-1.5 rounded-full bg-accent px-4 py-2 text-sm font-medium text-accent-foreground"
+            >
+              <CheckCircle2 size={15} strokeWidth={1.75} />
+              {strings.finishSessionBtn[lang]}
+            </motion.button>
+          )}
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.96 }}
+            transition={{ duration: 0.15 }}
+            onClick={onEnd}
+            className="flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-sm font-medium text-foreground-muted transition-colors hover:border-warning/50 hover:text-warning"
+          >
+            <X size={15} strokeWidth={1.75} />
+            {strings.endSessionBtn[lang]}
+          </motion.button>
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 sm:p-6 lg:flex-row lg:overflow-hidden">
@@ -253,12 +273,7 @@ export function StudySessionView({
           </div>
 
           <div className="rounded-2xl border border-border bg-surface p-5">
-            <ModeTimer
-              lang={lang}
-              presets={timerPresets}
-              color="var(--color-accent)"
-              onColor="var(--color-accent-foreground)"
-            />
+            <ModeTimer lang={lang} presets={timerPresets} />
           </div>
         </div>
 

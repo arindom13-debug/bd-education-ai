@@ -1,58 +1,44 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Check, ChevronLeft, Sparkles } from "lucide-react";
+import { Check, ChevronLeft, Pencil, RotateCcw } from "lucide-react";
 import { strings, type Lang } from "@/lib/i18n";
 import {
   curriculumTrackOptions,
   classLevelOptions,
   examTargetOptions,
-  studyLevelOptions,
-  dailyMinutesOptions,
-  daysUntil,
   type StudyPlan,
 } from "@/lib/study-plan";
 import { subjects } from "@/lib/curriculum-data";
+import {
+  onboardingQuestions,
+  TOTAL_QUESTIONS,
+  OTHER_VALUE,
+  otherKey,
+  formatAnswer,
+  getExtraText,
+  loadOnboardingProgress,
+  saveOnboardingProgress,
+  type DeepQuestion,
+  type Localized,
+  type OnboardingProgress,
+} from "@/lib/onboarding";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
+const AUTO_ADVANCE_MS = 220;
 
-const slideVariants = {
-  enter: (dir: "forward" | "back") => ({ opacity: 0, x: dir === "forward" ? 28 : -28 }),
-  center: { opacity: 1, x: 0 },
-  exit: (dir: "forward" | "back") => ({ opacity: 0, x: dir === "forward" ? -28 : 28 }),
+// Fade + slight upward movement — no horizontal slide, no bounce.
+const questionVariants = {
+  enter: { opacity: 0, y: 12 },
+  center: { opacity: 1, y: 0 },
+  exit: { opacity: 0, y: -8 },
 };
 
-type StepId =
-  | "welcome"
-  | "name"
-  | "classTrack"
-  | "examTarget"
-  | "strong"
-  | "weak"
-  | "level"
-  | "routine"
-  | "goal"
-  | "done";
-
-const STEP_ORDER: StepId[] = [
-  "welcome",
-  "name",
-  "classTrack",
-  "examTarget",
-  "strong",
-  "weak",
-  "level",
-  "routine",
-  "goal",
-  "done",
-];
-const QUESTION_STEPS: StepId[] = ["name", "classTrack", "examTarget", "strong", "weak", "level", "routine", "goal"];
-
 const inputClass =
-  "rounded-lg border border-border bg-background px-3 py-2 text-sm outline-none focus:border-accent";
+  "w-full rounded-lg border border-border bg-control px-3 py-2 text-sm outline-none transition-colors duration-150 focus:border-foreground-faint";
 
-function ChipButton({
+function OptionRow({
   active,
   onClick,
   children,
@@ -64,18 +50,19 @@ function ChipButton({
   return (
     <button
       onClick={onClick}
-      className={`rounded-xl border px-4 py-3 text-left text-sm font-medium transition-colors ${
+      className={`flex items-center justify-between gap-3 rounded-lg border px-4 py-3 text-left text-sm transition-colors duration-150 ${
         active
-          ? "border-accent bg-accent-soft text-accent"
-          : "border-border hover:border-accent/50"
+          ? "border-foreground-faint bg-surface-muted font-medium text-foreground-strong"
+          : "border-border text-foreground hover:bg-surface-muted"
       }`}
     >
-      {children}
+      <span>{children}</span>
+      {active && <Check size={15} strokeWidth={2} className="shrink-0" />}
     </button>
   );
 }
 
-function PillButton({
+function Chip({
   active,
   onClick,
   children,
@@ -87,37 +74,14 @@ function PillButton({
   return (
     <button
       onClick={onClick}
-      className={`rounded-full border px-3.5 py-1.5 text-sm ${
-        active ? "border-accent bg-accent-soft text-accent" : "border-border text-foreground-muted"
+      className={`rounded-full border px-3.5 py-1.5 text-sm transition-colors duration-150 ${
+        active
+          ? "border-foreground-faint bg-surface-muted font-medium text-foreground-strong"
+          : "border-border text-foreground-muted hover:text-foreground"
       }`}
     >
       {children}
     </button>
-  );
-}
-
-function QuestionHeader({ title, why }: { title: string; why?: string }) {
-  return (
-    <div>
-      <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
-      {why && <p className="mt-1.5 text-sm text-foreground-muted">{why}</p>}
-    </div>
-  );
-}
-
-function StepFooter({ onSkip, onContinue, lang }: { onSkip: () => void; onContinue: () => void; lang: Lang }) {
-  return (
-    <div className="flex items-center justify-between">
-      <button onClick={onSkip} className="text-xs text-foreground-muted hover:text-foreground">
-        {strings.skip[lang]}
-      </button>
-      <button
-        onClick={onContinue}
-        className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-accent-foreground"
-      >
-        {strings.continueBtn[lang]}
-      </button>
-    </div>
   );
 }
 
@@ -131,15 +95,6 @@ function formatExamDate(dateStr: string, lang: Lang): string {
   }).format(date);
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-center justify-between gap-3 border-b border-border py-2.5 last:border-b-0">
-      <span className="text-xs font-medium uppercase tracking-wide text-foreground-muted">{label}</span>
-      <span className="max-w-[65%] truncate text-right text-sm font-medium">{value}</span>
-    </div>
-  );
-}
-
 export function SetupView({
   lang,
   plan,
@@ -151,316 +106,393 @@ export function SetupView({
   onChange: (patch: Partial<StudyPlan>) => void;
   onFinish: () => void;
 }) {
-  const [stepIndex, setStepIndex] = useState(0);
-  const [direction, setDirection] = useState<"forward" | "back">("forward");
-  const step = STEP_ORDER[stepIndex];
-  const remaining = daysUntil(plan.examDate);
+  const [progress, setProgress] = useState<OnboardingProgress>(() => loadOnboardingProgress());
+  const [editing, setEditing] = useState(false);
+  const advanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const goNext = () => {
-    setDirection("forward");
-    setStepIndex((i) => Math.min(i + 1, STEP_ORDER.length - 1));
+  useEffect(() => () => {
+    if (advanceTimer.current) clearTimeout(advanceTimer.current);
+  }, []);
+
+  const commit = (next: OnboardingProgress) => {
+    setProgress(next);
+    saveOnboardingProgress(next);
   };
+  const setAnswer = (id: string, value: string) =>
+    commit({ ...progress, answers: { ...progress.answers, [id]: value } });
+
+  const stepIndex = Math.min(progress.step, TOTAL_QUESTIONS);
+  const question: DeepQuestion | null = stepIndex < TOTAL_QUESTIONS ? onboardingQuestions[stepIndex] : null;
+
+  const advanceFrom = (base: OnboardingProgress) =>
+    commit({ ...base, step: Math.min(base.step + 1, TOTAL_QUESTIONS) });
+
+  const goNext = () => advanceFrom(progress);
   const goBack = () => {
-    setDirection("back");
-    setStepIndex((i) => Math.max(i - 1, 0));
-  };
-  const chooseAndAdvance = (patch: Partial<StudyPlan>) => {
-    onChange(patch);
-    setDirection("forward");
-    setTimeout(() => setStepIndex((i) => Math.min(i + 1, STEP_ORDER.length - 1)), 250);
-  };
-  const toggleInList = (key: "weakSubjects" | "strongSubjects", id: string) => {
-    const list = plan[key];
-    onChange({ [key]: list.includes(id) ? list.filter((s) => s !== id) : [...list, id] });
+    if (advanceTimer.current) clearTimeout(advanceTimer.current);
+    if (stepIndex === 0) return;
+    commit({ ...progress, step: stepIndex - 1 });
   };
 
-  const questionNumber = QUESTION_STEPS.indexOf(step) + 1;
-  const totalQuestions = QUESTION_STEPS.length;
+  /** Single-select saves, then animates on to the next question by itself. */
+  const selectSingle = (id: string, value: string) => {
+    const next: OnboardingProgress = { ...progress, answers: { ...progress.answers, [id]: value } };
+    commit(next);
+    if (advanceTimer.current) clearTimeout(advanceTimer.current);
+    // "Other" needs its follow-up input, so it never auto-advances.
+    if (value === OTHER_VALUE) return;
+    advanceTimer.current = setTimeout(() => advanceFrom(next), AUTO_ADVANCE_MS);
+  };
 
-  const classLabel = classLevelOptions.find((o) => o.value === plan.classLevel)?.label[lang] ?? "";
-  const trackLabel = curriculumTrackOptions.find((o) => o.value === plan.curriculumTrack)?.label[lang] ?? "";
-  const examTargetLabel = examTargetOptions.find((o) => o.value === plan.examTarget)?.label[lang] ?? "";
-  const levelLabel = studyLevelOptions.find((o) => o.value === plan.studyLevel)?.label[lang] ?? "";
-  const dailyLabel = dailyMinutesOptions.find((o) => o.value === plan.dailyMinutes)?.label[lang] ?? "";
-  const strongNames = subjects
-    .filter((s) => plan.strongSubjects.includes(s.id))
-    .map((s) => s.name[lang])
-    .join(", ");
-  const weakNames = subjects
-    .filter((s) => plan.weakSubjects.includes(s.id))
-    .map((s) => s.name[lang])
-    .join(", ");
-  const examSummary = [examTargetLabel, remaining !== null ? formatExamDate(plan.examDate, lang) : ""]
-    .filter(Boolean)
-    .join(" · ");
+  const toggleSubject = (list: "weakSubjects" | "strongSubjects", id: string) => {
+    const current = plan[list];
+    onChange({ [list]: current.includes(id) ? current.filter((s) => s !== id) : [...current, id] });
+  };
+
+  const canContinue = (q: DeepQuestion): boolean => {
+    if (q.optional) return true;
+    if (q.type === "subjects") {
+      const chosen = q.planList ? plan[q.planList].length > 0 : false;
+      const extra = q.extra ? getExtraText(q.extra.id, progress.answers) !== "" : false;
+      return chosen || extra;
+    }
+    const value = progress.answers[q.id];
+    if (q.type === "text") return typeof value === "string" && value.trim() !== "";
+    if (value === OTHER_VALUE) return getExtraText(otherKey(q.id), progress.answers) !== "";
+    return typeof value === "string" && value !== "";
+  };
+
+  const finish = () => {
+    commit({ ...progress, completed: true });
+    if (editing) setEditing(false);
+    else onFinish();
+  };
+
+  const startEditing = () => {
+    setEditing(true);
+    commit({ ...progress, step: 0 });
+  };
+
+  const restart = () => {
+    setEditing(false);
+    commit({ step: 0, answers: {}, completed: false });
+  };
+
+  const subjectsAnswer = (q: DeepQuestion): string => {
+    const names = q.planList
+      ? subjects.filter((s) => plan[q.planList!].includes(s.id)).map((s) => s.name[lang]).join(", ")
+      : "";
+    const extra = q.extra ? getExtraText(q.extra.id, progress.answers) : "";
+    return [names, extra].filter(Boolean).join(" — ");
+  };
+  const answerFor = (q: DeepQuestion): string =>
+    q.type === "subjects" ? subjectsAnswer(q) : formatAnswer(q, progress.answers, lang);
+
+  // ===================== PROFILE (already completed) =====================
+  if (progress.completed && !editing) {
+    const groups: { stage: Localized; items: { label: string; value: string }[] }[] = [];
+    for (const q of onboardingQuestions) {
+      const value = answerFor(q);
+      if (!value) continue;
+      const last = groups[groups.length - 1];
+      if (last && last.stage.en === q.stage.en) last.items.push({ label: q.title[lang], value });
+      else groups.push({ stage: q.stage, items: [{ label: q.title[lang], value }] });
+    }
+
+    return (
+      <div className="p-5 sm:p-8">
+        <div className="mx-auto flex max-w-xl flex-col gap-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground-strong">
+              {strings.studentProfileTitle[lang]}
+            </h1>
+            <p className="mt-1 text-sm text-foreground-muted">{strings.studentProfileSubtitle[lang]}</p>
+          </div>
+
+          {/* Academic context lives here rather than in the ten questions —
+              the app already knows it, and it stays editable. */}
+          <div className="rounded-xl border border-border bg-surface p-4">
+            <p className="mb-3 text-xs font-medium uppercase tracking-wide text-foreground-muted">
+              {strings.academicProfileLabel[lang]}
+            </p>
+            <div className="flex flex-col gap-3">
+              <div className="flex flex-wrap gap-2">
+                {classLevelOptions.map((opt) => (
+                  <Chip
+                    key={opt.value}
+                    active={plan.classLevel === opt.value}
+                    onClick={() => onChange({ classLevel: opt.value })}
+                  >
+                    {opt.label[lang]}
+                  </Chip>
+                ))}
+                {curriculumTrackOptions.map((opt) => (
+                  <Chip
+                    key={opt.value}
+                    active={plan.curriculumTrack === opt.value}
+                    onClick={() => onChange({ curriculumTrack: opt.value })}
+                  >
+                    {opt.label[lang]}
+                  </Chip>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {examTargetOptions.map((opt) => (
+                  <Chip
+                    key={opt.value}
+                    active={plan.examTarget === opt.value}
+                    onClick={() => onChange({ examTarget: opt.value })}
+                  >
+                    {opt.label[lang]}
+                  </Chip>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <input
+                  type="date"
+                  className="w-44 rounded-lg border border-border bg-control px-3 py-2 text-sm outline-none focus:border-foreground-faint"
+                  value={plan.examDate}
+                  onChange={(e) => onChange({ examDate: e.target.value })}
+                />
+                {plan.examDate && (
+                  <span className="text-xs text-foreground-muted">{formatExamDate(plan.examDate, lang)}</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {groups.map((g) => (
+            <div key={g.stage.en} className="rounded-xl border border-border bg-surface p-4">
+              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">
+                {g.stage[lang]}
+              </p>
+              <div className="flex flex-col">
+                {g.items.map((item) => (
+                  <div key={item.label} className="border-b border-border py-2.5 last:border-b-0 last:pb-0">
+                    <p className="text-xs text-foreground-muted">{item.label}</p>
+                    <p className="mt-1 text-sm">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            <button
+              onClick={startEditing}
+              className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground"
+            >
+              <Pencil size={14} strokeWidth={1.75} />
+              {strings.editProfileBtn[lang]}
+            </button>
+            <button
+              onClick={restart}
+              className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm text-foreground-muted transition-colors duration-150 hover:text-foreground"
+            >
+              <RotateCcw size={14} strokeWidth={1.75} />
+              {strings.restartOnboardingBtn[lang]}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ===================== COMPLETION STATE =====================
+  if (!question) {
+    const personalizes = [
+      strings.personalizeExplanations[lang],
+      strings.personalizeDifficulty[lang],
+      strings.personalizeRecommendations[lang],
+      strings.personalizeRevision[lang],
+      strings.personalizeStudyPlans[lang],
+      strings.personalizeLearningStyle[lang],
+    ];
+    return (
+      <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center p-5 sm:p-8">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: EASE }}
+          className="flex flex-col gap-5"
+        >
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground-strong">
+              {strings.setupCompleteTitle[lang]}
+            </h1>
+            <p className="mt-2 text-sm text-foreground-muted">{strings.setupCompleteDesc[lang]}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {personalizes.map((label) => (
+              <span
+                key={label}
+                className="rounded-full border border-border px-3 py-1.5 text-xs text-foreground-muted"
+              >
+                {label}
+              </span>
+            ))}
+          </div>
+          <div className="mt-1 flex items-center gap-2">
+            <button
+              onClick={goBack}
+              className="flex items-center gap-1 rounded-lg border border-border px-4 py-2.5 text-sm text-foreground-muted transition-colors duration-150 hover:text-foreground"
+            >
+              <ChevronLeft size={15} strokeWidth={1.75} />
+              {strings.backBtn[lang]}
+            </button>
+            <button
+              onClick={finish}
+              className="rounded-lg bg-accent px-6 py-2.5 text-sm font-medium text-accent-foreground"
+            >
+              {editing ? strings.saveBtn[lang] : strings.continueToAiBtn[lang]}
+            </button>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // ===================== QUESTION =====================
+  const q = question;
+  const answer = progress.answers[q.id];
+  const showOtherInput = q.type === "single" && answer === OTHER_VALUE;
+  const isLast = stepIndex === TOTAL_QUESTIONS - 1;
+  const continueOk = canContinue(q);
 
   return (
     <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col p-5 sm:p-8">
-      {questionNumber > 0 && (
-        <div className="mb-8 shrink-0">
-          <div className="flex items-center justify-between text-xs text-foreground-muted">
-            <button onClick={goBack} aria-label="Back" className="flex items-center hover:text-foreground">
-              <ChevronLeft size={16} strokeWidth={1.75} />
-            </button>
-            <span>
-              {lang === "en"
-                ? `Step ${questionNumber} of ${totalQuestions}`
-                : `ধাপ ${questionNumber}/${totalQuestions}`}
-            </span>
-          </div>
-          <div className="mt-2 h-1.5 w-full rounded-full bg-surface-muted">
-            <motion.div
-              className="h-full rounded-full bg-accent"
-              animate={{ width: `${(questionNumber / totalQuestions) * 100}%` }}
-              transition={{ duration: 0.3, ease: EASE }}
-            />
-          </div>
+      <div className="mb-10 shrink-0">
+        <div className="flex items-center justify-between text-xs text-foreground-muted">
+          <span className="font-medium uppercase tracking-wide">{q.stage[lang]}</span>
+          <span className="tabular-nums">
+            {String(stepIndex + 1).padStart(2, "0")} / {String(TOTAL_QUESTIONS).padStart(2, "0")}
+          </span>
         </div>
-      )}
-
-      <div className="relative flex flex-1 flex-col justify-center overflow-hidden">
-        <AnimatePresence mode="wait" custom={direction}>
+        <div className="mt-2 h-px w-full bg-border">
           <motion.div
-            key={step}
-            custom={direction}
-            variants={slideVariants}
+            className="h-full bg-foreground-faint"
+            animate={{ width: `${((stepIndex + 1) / TOTAL_QUESTIONS) * 100}%` }}
+            transition={{ duration: 0.3, ease: EASE }}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-1 flex-col justify-center">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={q.id}
+            variants={questionVariants}
             initial="enter"
             animate="center"
             exit="exit"
-            transition={{ duration: 0.25, ease: EASE }}
+            transition={{ duration: 0.28, ease: EASE }}
             className="flex flex-col gap-5"
           >
-            {step === "welcome" && (
-              <div className="flex flex-col items-center gap-4 text-center">
-                <div className="flex size-14 items-center justify-center rounded-2xl bg-accent-soft text-accent">
-                  <Sparkles size={28} strokeWidth={1.75} />
+            <div>
+              <h1 className="text-xl font-semibold leading-snug tracking-tight text-foreground-strong">
+                {q.title[lang]}
+              </h1>
+              {q.why && <p className="mt-2 text-sm text-foreground-muted">{q.why[lang]}</p>}
+            </div>
+
+            {q.type === "subjects" && (
+              <>
+                <div className="flex flex-wrap gap-2">
+                  {subjects.map((s) => (
+                    <Chip
+                      key={s.id}
+                      active={q.planList ? plan[q.planList].includes(s.id) : false}
+                      onClick={() => q.planList && toggleSubject(q.planList, s.id)}
+                    >
+                      {s.name[lang]}
+                    </Chip>
+                  ))}
                 </div>
-                <div>
-                  <h1 className="text-2xl font-semibold tracking-tight">
-                    {strings.onboardingWelcomeTitle[lang]}
-                  </h1>
-                  <p className="mt-2 text-sm text-foreground-muted">
-                    {strings.onboardingWelcomeSubtitle[lang]}
-                  </p>
-                </div>
+                {q.extra && (
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
+                      {q.extra.label[lang]}
+                    </label>
+                    <input
+                      value={getExtraText(q.extra.id, progress.answers)}
+                      onChange={(e) => setAnswer(q.extra!.id, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && continueOk) goNext();
+                      }}
+                      placeholder={q.extra.placeholder[lang]}
+                      className={inputClass}
+                    />
+                  </div>
+                )}
+              </>
+            )}
+
+            {q.type === "single" && (
+              <div className="flex flex-col gap-2">
+                {q.options!.map((opt) => (
+                  <OptionRow
+                    key={opt.value}
+                    active={answer === opt.value}
+                    onClick={() => selectSingle(q.id, opt.value)}
+                  >
+                    {opt.label[lang]}
+                  </OptionRow>
+                ))}
+                {showOtherInput && (
+                  <input
+                    autoFocus
+                    value={getExtraText(otherKey(q.id), progress.answers)}
+                    onChange={(e) => setAnswer(otherKey(q.id), e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && continueOk) goNext();
+                    }}
+                    placeholder={strings.otherPlaceholder[lang]}
+                    className={`${inputClass} mt-1`}
+                  />
+                )}
+              </div>
+            )}
+
+            {q.type === "text" && (
+              <textarea
+                autoFocus
+                value={typeof answer === "string" ? answer : ""}
+                onChange={(e) => setAnswer(q.id, e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    goNext();
+                  }
+                }}
+                placeholder={q.placeholder?.[lang] ?? ""}
+                className={`${inputClass} min-h-28 resize-none`}
+              />
+            )}
+
+            <div className="mt-2 flex items-center justify-between">
+              <button
+                onClick={goBack}
+                disabled={stepIndex === 0}
+                className="flex items-center gap-1 text-sm text-foreground-muted transition-colors duration-150 hover:text-foreground disabled:invisible"
+              >
+                <ChevronLeft size={15} strokeWidth={1.75} />
+                {strings.backBtn[lang]}
+              </button>
+              <div className="flex items-center gap-3">
+                {q.optional && (
+                  <button onClick={goNext} className="text-xs text-foreground-muted hover:text-foreground">
+                    {strings.skip[lang]}
+                  </button>
+                )}
                 <button
                   onClick={goNext}
-                  className="mt-2 rounded-lg bg-accent px-6 py-2.5 text-sm font-medium text-accent-foreground"
+                  disabled={!continueOk}
+                  className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-accent-foreground transition-opacity duration-150 disabled:opacity-40"
                 >
-                  {strings.onboardingStart[lang]}
+                  {isLast ? strings.finishBtn[lang] : strings.continueBtn[lang]}
                 </button>
               </div>
-            )}
-
-            {step === "name" && (
-              <>
-                <QuestionHeader title={strings.qNameTitle[lang]} why={strings.qNameWhy[lang]} />
-                <input
-                  autoFocus
-                  className={inputClass}
-                  value={plan.name}
-                  onChange={(e) => onChange({ name: e.target.value })}
-                  placeholder={strings.namePlaceholder[lang]}
-                />
-                <StepFooter onSkip={goNext} onContinue={goNext} lang={lang} />
-              </>
-            )}
-
-            {step === "classTrack" && (
-              <>
-                <QuestionHeader title={strings.qClassTrackTitle[lang]} why={strings.qClassTrackWhy[lang]} />
-                <div>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">
-                    {strings.qClassTitle[lang]}
-                  </p>
-                  <div className="flex flex-col gap-2">
-                    {classLevelOptions.map((opt) => (
-                      <ChipButton
-                        key={opt.value}
-                        active={plan.classLevel === opt.value}
-                        onClick={() => onChange({ classLevel: opt.value })}
-                      >
-                        {opt.label[lang]}
-                      </ChipButton>
-                    ))}
-                  </div>
-                </div>
-                <div>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">
-                    {strings.qTrackTitle[lang]}
-                  </p>
-                  <div className="flex flex-col gap-2">
-                    {curriculumTrackOptions.map((opt) => (
-                      <ChipButton
-                        key={opt.value}
-                        active={plan.curriculumTrack === opt.value}
-                        onClick={() => onChange({ curriculumTrack: opt.value })}
-                      >
-                        {opt.label[lang]}
-                      </ChipButton>
-                    ))}
-                  </div>
-                </div>
-                <StepFooter onSkip={goNext} onContinue={goNext} lang={lang} />
-              </>
-            )}
-
-            {step === "examTarget" && (
-              <>
-                <QuestionHeader title={strings.qExamTargetTitle[lang]} why={strings.qExamTargetWhy[lang]} />
-                <div className="flex flex-wrap gap-2">
-                  {examTargetOptions.map((opt) => (
-                    <PillButton
-                      key={opt.value}
-                      active={plan.examTarget === opt.value}
-                      onClick={() => onChange({ examTarget: opt.value })}
-                    >
-                      {opt.label[lang]}
-                    </PillButton>
-                  ))}
-                </div>
-                <div>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">
-                    {strings.qExamTitle[lang]}
-                  </p>
-                  <input
-                    type="date"
-                    className={inputClass}
-                    value={plan.examDate}
-                    onChange={(e) => onChange({ examDate: e.target.value })}
-                  />
-                  {remaining !== null && (
-                    <p className="mt-2 text-sm font-medium text-accent">
-                      {remaining >= 0
-                        ? `${remaining} ${strings.daysLeft[lang]}`
-                        : lang === "en"
-                        ? "This date has passed"
-                        : "তারিখটি পার হয়ে গেছে"}
-                    </p>
-                  )}
-                </div>
-                <StepFooter onSkip={goNext} onContinue={goNext} lang={lang} />
-              </>
-            )}
-
-            {step === "strong" && (
-              <>
-                <QuestionHeader title={strings.qStrongTitle[lang]} why={strings.qStrongWhy[lang]} />
-                <div className="flex flex-wrap gap-2">
-                  {subjects.map((s) => (
-                    <PillButton
-                      key={s.id}
-                      active={plan.strongSubjects.includes(s.id)}
-                      onClick={() => toggleInList("strongSubjects", s.id)}
-                    >
-                      {s.name[lang]}
-                    </PillButton>
-                  ))}
-                </div>
-                <StepFooter onSkip={goNext} onContinue={goNext} lang={lang} />
-              </>
-            )}
-
-            {step === "weak" && (
-              <>
-                <QuestionHeader title={strings.qWeakTitle[lang]} why={strings.qWeakWhy[lang]} />
-                <div className="flex flex-wrap gap-2">
-                  {subjects.map((s) => (
-                    <PillButton
-                      key={s.id}
-                      active={plan.weakSubjects.includes(s.id)}
-                      onClick={() => toggleInList("weakSubjects", s.id)}
-                    >
-                      {s.name[lang]}
-                    </PillButton>
-                  ))}
-                </div>
-                <StepFooter onSkip={goNext} onContinue={goNext} lang={lang} />
-              </>
-            )}
-
-            {step === "level" && (
-              <>
-                <QuestionHeader title={strings.qLevelTitle[lang]} why={strings.qLevelWhy[lang]} />
-                <div className="flex flex-col gap-2">
-                  {studyLevelOptions.map((opt) => (
-                    <ChipButton
-                      key={opt.value}
-                      active={plan.studyLevel === opt.value}
-                      onClick={() => chooseAndAdvance({ studyLevel: opt.value })}
-                    >
-                      {opt.label[lang]}
-                    </ChipButton>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {step === "routine" && (
-              <>
-                <QuestionHeader title={strings.qRoutineTitle[lang]} why={strings.qRoutineWhy[lang]} />
-                <div className="grid grid-cols-2 gap-2">
-                  {dailyMinutesOptions.map((opt) => (
-                    <ChipButton
-                      key={opt.value}
-                      active={plan.dailyMinutes === opt.value}
-                      onClick={() => chooseAndAdvance({ dailyMinutes: opt.value })}
-                    >
-                      {opt.label[lang]}
-                    </ChipButton>
-                  ))}
-                </div>
-              </>
-            )}
-
-            {step === "goal" && (
-              <>
-                <QuestionHeader title={strings.qGoalTitle[lang]} why={strings.qGoalWhy[lang]} />
-                <textarea
-                  className={`${inputClass} min-h-24 resize-none`}
-                  value={plan.goal}
-                  onChange={(e) => onChange({ goal: e.target.value })}
-                  placeholder={strings.goalPlaceholder[lang]}
-                />
-                <StepFooter onSkip={goNext} onContinue={goNext} lang={lang} />
-              </>
-            )}
-
-            {step === "done" && (
-              <div className="flex flex-col items-center gap-4 text-center">
-                <div className="flex size-14 items-center justify-center rounded-2xl bg-success/15 text-success animate-[pop-in_420ms_ease-out]">
-                  <Check size={28} strokeWidth={2} />
-                </div>
-                <div>
-                  <h1 className="text-2xl font-semibold tracking-tight">{strings.onboardingDoneTitle[lang]}</h1>
-                  <p className="mt-2 text-sm text-foreground-muted">{strings.onboardingDoneSubtitle[lang]}</p>
-                </div>
-
-                <div className="w-full rounded-2xl border border-border bg-surface p-4 text-left">
-                  <SummaryRow label={strings.qClassTitle[lang]} value={classLabel} />
-                  <SummaryRow label={strings.qTrackTitle[lang]} value={trackLabel} />
-                  {examSummary && <SummaryRow label={strings.setupSummaryExam[lang]} value={examSummary} />}
-                  {strongNames && (
-                    <SummaryRow label={strings.setupSummaryStrengths[lang]} value={strongNames} />
-                  )}
-                  {weakNames && (
-                    <SummaryRow label={strings.setupSummaryFocusAreas[lang]} value={weakNames} />
-                  )}
-                  {levelLabel && <SummaryRow label={strings.setupSummaryLevel[lang]} value={levelLabel} />}
-                  {dailyLabel && <SummaryRow label={strings.setupSummaryDailyTime[lang]} value={dailyLabel} />}
-                  {plan.goal.trim() && (
-                    <SummaryRow label={strings.setupSummaryGoal[lang]} value={plan.goal.trim()} />
-                  )}
-                </div>
-
-                <button
-                  onClick={onFinish}
-                  className="mt-1 rounded-lg bg-accent px-6 py-2.5 text-sm font-medium text-accent-foreground"
-                >
-                  {strings.startMyJourneyBtn[lang]}
-                </button>
-              </div>
-            )}
+            </div>
           </motion.div>
         </AnimatePresence>
       </div>

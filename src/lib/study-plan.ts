@@ -29,6 +29,30 @@ export const defaultStudyPlan: StudyPlan = {
   examDate: "",
 };
 
+// Local-only persistence for now — swap for a real profile record once
+// student profiles are backend-persisted.
+const PLAN_STORAGE_KEY = "arindoms-ai-study-plan";
+
+export function loadStudyPlan(): StudyPlan {
+  if (typeof window === "undefined") return defaultStudyPlan;
+  try {
+    const raw = localStorage.getItem(PLAN_STORAGE_KEY);
+    if (!raw) return defaultStudyPlan;
+    const parsed = JSON.parse(raw) as Partial<StudyPlan>;
+    return { ...defaultStudyPlan, ...parsed };
+  } catch {
+    return defaultStudyPlan;
+  }
+}
+
+export function saveStudyPlan(plan: StudyPlan) {
+  try {
+    localStorage.setItem(PLAN_STORAGE_KEY, JSON.stringify(plan));
+  } catch {
+    // storage unavailable — plan just won't persist across reloads
+  }
+}
+
 export const classLevelOptions: { value: ClassLevel; label: { en: string; bn: string } }[] = [
   { value: "9", label: { en: "Class 9", bn: "নবম শ্রেণি" } },
   { value: "10", label: { en: "Class 10", bn: "দশম শ্রেণি" } },

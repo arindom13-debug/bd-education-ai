@@ -7,14 +7,15 @@ import { strings, type Lang } from "@/lib/i18n";
 export function ModeTimer({
   lang,
   presets,
-  color,
-  onColor = "#ffffff",
+  tone = "accent",
 }: {
   lang: Lang;
   presets: { minutes: number; label: { en: string; bn: string } }[];
-  color: string;
-  onColor?: string;
+  tone?: "accent" | "warning";
 }) {
+  const activeClasses = tone === "warning" ? "border-warning bg-warning/10 text-warning" : "border-accent bg-accent-soft text-accent";
+  const textClass = tone === "warning" ? "text-warning" : "text-accent";
+  const buttonClasses = tone === "warning" ? "bg-warning text-white" : "bg-accent text-accent-foreground";
   const [presetIndex, setPresetIndex] = useState(0);
   const [secondsLeft, setSecondsLeft] = useState(presets[0].minutes * 60);
   const [running, setRunning] = useState(false);
@@ -51,9 +52,8 @@ export function ModeTimer({
             <button
               key={p.minutes}
               onClick={() => selectPreset(i)}
-              style={active ? { borderColor: color, backgroundColor: `${color}1f`, color } : undefined}
               className={`rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors ${
-                active ? "" : "border-border text-foreground-muted"
+                active ? activeClasses : "border-border text-foreground-muted"
               }`}
             >
               {p.label[lang]}
@@ -62,15 +62,14 @@ export function ModeTimer({
         })}
       </div>
 
-      <div className="text-5xl font-bold tabular-nums tracking-tight" style={{ color }}>
+      <div className={`text-5xl font-bold tabular-nums tracking-tight ${textClass}`}>
         {minutes}:{seconds}
       </div>
 
       <div className="flex gap-2">
         <button
           onClick={() => setRunning((r) => !r)}
-          style={{ backgroundColor: color, color: onColor }}
-          className="flex items-center gap-1.5 rounded-lg px-5 py-2 text-sm font-medium transition-transform active:scale-95"
+          className={`flex items-center gap-1.5 rounded-lg px-5 py-2 text-sm font-medium transition-transform active:scale-95 ${buttonClasses}`}
         >
           {running ? <Pause size={15} strokeWidth={2} /> : <Play size={15} strokeWidth={2} />}
           {running ? strings.timerPause[lang] : strings.timerStart[lang]}

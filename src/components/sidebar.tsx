@@ -18,16 +18,15 @@ import {
 import { strings, type Lang } from "@/lib/i18n";
 import { streakDays } from "@/lib/curriculum-data";
 import { chatHistory } from "@/lib/chat-data";
-import { ThemeToggle } from "@/components/theme-toggle";
 import { ProfilePanel } from "@/components/profile-panel";
 import { Tooltip } from "@/components/tooltip";
+import { MainCountdownStrip } from "@/components/main-countdown-strip";
 import type { StudyPlan } from "@/lib/study-plan";
 import type { ChatLanguage } from "@/lib/chat-language";
+import type { Countdown } from "@/lib/countdowns";
 
 export type CanvasView = "chat" | "progress" | "study" | "setup" | "tools" | "examMode" | "panicRevision";
 
-const EXAM_COLOR = "#4F7CFF";
-const PANIC_COLOR = "#F97316";
 const EASE = [0.16, 1, 0.3, 1] as const;
 
 export function BrandMark({ size = 24 }: { size?: number }) {
@@ -58,7 +57,7 @@ function NavButton({
     <button
       onClick={onClick}
       className={`relative flex items-center gap-2.5 rounded-md px-3 py-2.5 text-left text-sm transition-colors duration-150 ${
-        active ? "font-medium text-accent" : "text-foreground-muted hover:bg-surface-muted hover:text-foreground"
+        active ? "font-medium text-foreground-strong" : "text-foreground-muted hover:bg-surface-muted hover:text-foreground"
       }`}
     >
       {active && (
@@ -89,6 +88,7 @@ export function Sidebar({
   plan,
   chatLanguage,
   onChangeChatLanguage,
+  mainCountdown,
 }: {
   lang: Lang;
   onToggleLang: () => void;
@@ -104,6 +104,7 @@ export function Sidebar({
   plan: StudyPlan;
   chatLanguage: ChatLanguage;
   onChangeChatLanguage: (value: ChatLanguage) => void;
+  mainCountdown: Countdown | null;
 }) {
   const groups: { key: "today" | "yesterday"; label: string }[] = [
     { key: "today", label: strings.today[lang] },
@@ -126,7 +127,7 @@ export function Sidebar({
   }, [menuOpen]);
 
   return (
-    <div className="flex h-full flex-col bg-surface">
+    <div className="flex min-h-full flex-col bg-sidebar">
       {!hideHeader && (
         <div className="flex items-center justify-between border-b border-border px-4 py-4">
           <div className="flex items-center gap-2">
@@ -134,9 +135,6 @@ export function Sidebar({
             <span className="text-[15px] font-semibold tracking-tight">{strings.appName[lang]}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <Tooltip label={strings.toggleThemeLabel[lang]}>
-              <ThemeToggle />
-            </Tooltip>
             <button
               onClick={onToggleLang}
               className="rounded-md border border-border px-2 py-1 text-xs text-foreground-muted transition-colors duration-150 hover:text-foreground"
@@ -158,6 +156,8 @@ export function Sidebar({
         </div>
       )}
 
+      <MainCountdownStrip lang={lang} countdown={mainCountdown} variant="sidebar" />
+
       <div className="flex flex-col gap-1 px-3 pb-2 pt-3">
         <button
           onClick={onNewChat}
@@ -169,7 +169,7 @@ export function Sidebar({
         <NavButton
           active={view === "progress"}
           icon={Gauge}
-          label={strings.progress[lang]}
+          label={strings.studentHub[lang]}
           onClick={() => onSelectView("progress")}
           layoutGroup={layoutGroup}
         />
@@ -199,31 +199,29 @@ export function Sidebar({
       <div className="flex gap-2 px-3 pb-2">
         <button
           onClick={() => onSelectView("examMode")}
-          style={{
-            borderColor: EXAM_COLOR,
-            backgroundColor: view === "examMode" ? EXAM_COLOR : `${EXAM_COLOR}1a`,
-            color: view === "examMode" ? "#ffffff" : EXAM_COLOR,
-          }}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-2 text-xs font-medium transition-colors active:scale-95"
+          className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-2 text-xs font-medium transition-colors active:scale-95 ${
+            view === "examMode"
+              ? "border-accent bg-accent text-accent-foreground"
+              : "border-accent/30 bg-accent-soft text-accent"
+          }`}
         >
           <GraduationCap size={14} strokeWidth={1.75} />
           {strings.examModeBtn[lang]}
         </button>
         <button
           onClick={() => onSelectView("panicRevision")}
-          style={{
-            borderColor: PANIC_COLOR,
-            backgroundColor: view === "panicRevision" ? PANIC_COLOR : `${PANIC_COLOR}1a`,
-            color: view === "panicRevision" ? "#1f1300" : PANIC_COLOR,
-          }}
-          className="flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-2 text-xs font-medium transition-colors active:scale-95"
+          className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-2 text-xs font-medium transition-colors active:scale-95 ${
+            view === "panicRevision"
+              ? "border-accent bg-accent text-accent-foreground"
+              : "border-accent/30 bg-accent-soft text-accent"
+          }`}
         >
           <Zap size={14} strokeWidth={1.75} />
           {strings.panicBtn[lang]}
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 pb-2">
+      <div className="px-3 pb-2">
         {groups.map((group) => {
           const threads = chatHistory.filter((t) => t.group === group.key);
           if (threads.length === 0) return null;

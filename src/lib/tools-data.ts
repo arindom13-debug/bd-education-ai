@@ -1,4 +1,4 @@
-export type ToolId = "timer" | "notebook" | "mistakeBook" | "library" | "roadmap";
+export type ToolId = "timer" | "notebook" | "mistakeBook" | "library" | "roadmap" | "countdowns";
 
 export const notebookEntries = [
   {

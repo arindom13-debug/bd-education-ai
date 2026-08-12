@@ -24,6 +24,7 @@ import { CircularProgress } from "@/components/circular-progress";
 import { EmptyState } from "@/components/empty-state";
 import { AchievementsSection } from "@/components/achievements-section";
 import { CompletedBadge } from "@/components/completion-celebration";
+import { AiRecommendationStrip } from "@/components/ai-recommendation-strip";
 import type { CanvasView } from "@/components/sidebar";
 import { strings, type Lang } from "@/lib/i18n";
 import {
@@ -239,17 +240,16 @@ export function ProgressView({
               {/* Daily AI Briefing */}
               <Section
                 index={0}
-                className="relative overflow-hidden rounded-3xl border border-border bg-surface p-6 sm:p-7"
+                className="rounded-3xl border border-border bg-surface p-6 sm:p-7"
               >
-                <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-accent/8 via-transparent to-transparent" />
-                <div className="relative flex flex-col gap-5">
+                <div className="flex flex-col gap-5">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
                       <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-accent">
                         <Sparkles size={13} strokeWidth={1.75} />
                         {strings.dailyBriefingLabel[lang]}
                       </p>
-                      <h1 className="mt-1.5 truncate text-2xl font-semibold tracking-tight">{greeting}</h1>
+                      <h1 className="mt-1.5 truncate text-2xl font-semibold tracking-tight text-foreground-strong">{greeting}</h1>
                     </div>
                     <div className="flex shrink-0 flex-col items-center gap-1">
                       <CircularProgress value={overallProgress} size={52} strokeWidth={5} />
@@ -289,7 +289,7 @@ export function ProgressView({
                     </div>
                   </div>
 
-                  <div className="flex flex-col gap-3 rounded-xl border border-accent/25 bg-accent-soft p-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex flex-col gap-3 rounded-xl border border-border bg-highlight p-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <p className="text-xs font-medium uppercase tracking-wide text-accent">
                         {strings.todaysRecommendationLabel[lang]}
@@ -313,14 +313,9 @@ export function ProgressView({
               {/* Hero: Continue Learning */}
               <Section
                 index={1}
-                className="relative overflow-hidden rounded-3xl border border-accent/30 bg-surface p-6 sm:p-7"
+                className="rounded-3xl border border-accent/30 bg-surface p-6 sm:p-7"
               >
-                <div className="pointer-events-none absolute inset-0 bg-linear-to-br from-accent/25 via-accent/8 to-transparent" />
-                <div
-                  className="pointer-events-none absolute -top-20 -right-20 size-64 rounded-full blur-3xl"
-                  style={{ backgroundColor: "var(--color-accent)", opacity: 0.18 }}
-                />
-                <div className="relative flex flex-col gap-6">
+                <div className="flex flex-col gap-6">
                   <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-4">
                       <CircularProgress value={suggestedTopic.progress} size={80} strokeWidth={7} />
@@ -467,7 +462,7 @@ export function ProgressView({
                         <div className="flex h-12 w-full items-end rounded-md bg-surface-muted">
                           <motion.div
                             title={`${weekdayShort[i][lang]}: ${minutes} ${strings.minutesShort[lang]}`}
-                            className="w-full rounded-t-md bg-linear-to-t from-accent/80 to-accent"
+                            className="w-full rounded-t-md bg-accent"
                             initial={{ height: 0 }}
                             animate={{ height: `${maxMinutes ? (minutes / maxMinutes) * 100 : 0}%` }}
                             transition={{ duration: 0.4, delay: 0.15 + i * 0.03, ease: EASE }}
@@ -480,8 +475,18 @@ export function ProgressView({
                 </Card>
               </Section>
 
-              {/* Subject Progress — gradient cards */}
+              {/* AI Recommendations */}
               <Section index={4}>
+                <AiRecommendationStrip
+                  lang={lang}
+                  subjects={subjects}
+                  streakDays={streakDays}
+                  onAction={() => onNavigate("chat")}
+                />
+              </Section>
+
+              {/* Subject Progress — gradient cards */}
+              <Section index={5}>
                 <div className="mb-3 flex items-center justify-between">
                   <p className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
                     {strings.subjectProgress[lang]}
@@ -580,7 +585,7 @@ export function ProgressView({
               </Section>
 
               {/* Achievements */}
-              <Section index={5}>
+              <Section index={6}>
                 <AchievementsSection
                   lang={lang}
                   subjects={subjects}
@@ -590,7 +595,7 @@ export function ProgressView({
               </Section>
 
               {/* Collapsible details */}
-              <Section index={6}>
+              <Section index={7}>
                 <motion.button
                   whileTap={{ scale: 0.98 }}
                   onClick={() => setDetailsOpen((o) => !o)}

@@ -28,7 +28,6 @@ import {
 import { daysUntil, type StudyPlan } from "@/lib/study-plan";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
-const EXAM_COLOR = "#4F7CFF";
 
 // Placeholder until exams have their own record with a real name — swap this out later.
 const EXAM_NAME = { en: "SSC Examination", bn: "এসএসসি পরীক্ষা" };
@@ -91,13 +90,10 @@ export function ExamModeView({
         </button>
 
         <div className="flex flex-col items-center gap-2 text-center">
-          <div
-            className="flex size-14 items-center justify-center rounded-2xl"
-            style={{ backgroundColor: `${EXAM_COLOR}1f`, color: EXAM_COLOR }}
-          >
+          <div className="flex size-14 items-center justify-center rounded-2xl bg-accent-soft text-accent">
             <GraduationCap size={28} strokeWidth={1.75} />
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">{strings.examModeBtn[lang]}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground-strong">{strings.examModeBtn[lang]}</h1>
           <p className="text-sm text-foreground-muted">{strings.examModeTagline[lang]}</p>
         </div>
 
@@ -106,16 +102,13 @@ export function ExamModeView({
           initial={{ opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.3, ease: EASE }}
-          className="flex flex-col items-center gap-1 rounded-2xl border p-8 text-center"
-          style={{ borderColor: `${EXAM_COLOR}33` }}
+          className="flex flex-col items-center gap-1 rounded-2xl border border-accent/20 p-8 text-center"
         >
-          <p className="text-sm font-medium" style={{ color: EXAM_COLOR }}>
-            {EXAM_NAME[lang]}
-          </p>
+          <p className="text-sm font-medium text-accent">{EXAM_NAME[lang]}</p>
           {remainingDays !== null && (
             <p className="text-xs text-foreground-muted">{formatExamDate(plan.examDate, lang)}</p>
           )}
-          <p className="mt-4 text-xs font-medium uppercase tracking-wide" style={{ color: EXAM_COLOR }}>
+          <p className="mt-4 text-xs font-medium uppercase tracking-wide text-accent">
             {strings.examCountdown[lang]}
           </p>
           {remainingDays !== null ? (
@@ -125,16 +118,14 @@ export function ExamModeView({
                 initial={{ opacity: 0, scale: 0.92 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.25, ease: EASE }}
-                className="text-6xl font-bold tabular-nums tracking-tight"
-                style={{ color: EXAM_COLOR }}
+                className="text-6xl font-bold tabular-nums tracking-tight text-accent"
               >
                 {Math.max(remainingDays, 0)}
               </motion.p>
               <p className="text-sm text-foreground-muted">{strings.daysLeft[lang]}</p>
               <button
                 onClick={() => onNavigate("chat")}
-                style={{ backgroundColor: EXAM_COLOR }}
-                className="mt-5 rounded-lg px-6 py-3 text-sm font-semibold text-white transition-transform active:scale-95"
+                className="mt-5 rounded-lg bg-accent px-6 py-3 text-sm font-semibold text-accent-foreground transition-transform active:scale-95"
               >
                 {strings.startRevisionBtn[lang]}
               </button>
@@ -147,7 +138,6 @@ export function ExamModeView({
                 description={strings.examDateEmptyDesc[lang]}
                 ctaLabel={strings.setExamDateBtn[lang]}
                 onCtaClick={() => onNavigate("setup")}
-                accentColor={EXAM_COLOR}
               />
             </div>
           )}
@@ -162,7 +152,7 @@ export function ExamModeView({
             </p>
           </div>
           <div className="flex flex-col items-center justify-center gap-1 rounded-2xl border border-border bg-surface p-4 text-center">
-            <p className="text-2xl font-semibold tabular-nums" style={{ color: EXAM_COLOR }}>
+            <p className="text-2xl font-semibold tabular-nums text-accent">
               {chaptersMastered}/{chaptersTotal}
             </p>
             <p className="text-xs text-foreground-muted">{strings.topicsMasteredLabel[lang]}</p>
@@ -182,7 +172,6 @@ export function ExamModeView({
               description={strings.weakTopicsEmptyDesc[lang]}
               ctaLabel={strings.addWeakTopicsBtn[lang]}
               onCtaClick={() => onNavigate("setup")}
-              accentColor={EXAM_COLOR}
               compact
             />
           ) : (
@@ -192,13 +181,9 @@ export function ExamModeView({
                 return (
                   <div
                     key={s.id}
-                    className="flex items-center gap-3 rounded-lg px-3 py-2"
-                    style={{ backgroundColor: `${EXAM_COLOR}0d` }}
+                    className="flex items-center gap-3 rounded-lg bg-accent-soft px-3 py-2"
                   >
-                    <span
-                      className="flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold text-white"
-                      style={{ backgroundColor: EXAM_COLOR }}
-                    >
+                    <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-accent text-[10px] font-semibold text-accent-foreground">
                       {i + 1}
                     </span>
                     <div className="min-w-0 flex-1">
@@ -230,10 +215,7 @@ export function ExamModeView({
           <div className="flex flex-col gap-2.5">
             {revisionSteps.map((step, i) => (
               <div key={i} className="flex items-center gap-3 text-sm">
-                <span
-                  className="flex size-5 shrink-0 items-center justify-center rounded-full text-[10px] font-medium"
-                  style={{ backgroundColor: `${EXAM_COLOR}1f`, color: EXAM_COLOR }}
-                >
+                <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-accent-soft text-[10px] font-medium text-accent">
                   {i + 1}
                 </span>
                 {step[lang]}
@@ -244,7 +226,7 @@ export function ExamModeView({
 
         {/* Tier 4 — supporting tools, deliberately quieter */}
         <div className="rounded-xl border border-border p-4">
-          <ModeTimer lang={lang} presets={timerPresets} color={EXAM_COLOR} />
+          <ModeTimer lang={lang} presets={timerPresets} />
         </div>
 
         <div className="flex flex-wrap gap-2">

@@ -2,17 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { ArrowUp, Sparkles } from "lucide-react";
+import { ArrowUp } from "lucide-react";
 import { strings, type Lang } from "@/lib/i18n";
-import { subjects as allSubjects, streakDays, type Subject } from "@/lib/curriculum-data";
-import { placeholderYesterdayMinutes } from "@/lib/daily-briefing";
-import type { StudyPlan } from "@/lib/study-plan";
+import { subjects as allSubjects, type Subject } from "@/lib/curriculum-data";
+import { classLevelOptions, type StudyPlan } from "@/lib/study-plan";
 import { getDemoReplyText, type ChatLanguage } from "@/lib/chat-language";
 import type { ChatMessage, ChatThread } from "@/lib/chat-data";
 import { TypingDots } from "@/components/typing-dots";
-import { DailyBriefing } from "@/components/daily-briefing";
-import { ContinueLearningCard } from "@/components/continue-learning-card";
-import { AiRecommendationStrip } from "@/components/ai-recommendation-strip";
 import { RecentChatsSection } from "@/components/recent-chats-section";
 import { SubjectWorkspace } from "@/components/subject-workspace";
 
@@ -54,7 +50,6 @@ export function ChatView({
   plan,
   subjects,
   chatLanguage,
-  onStartSession,
   onOpenChat,
 }: {
   lang: Lang;
@@ -62,7 +57,6 @@ export function ChatView({
   plan: StudyPlan;
   subjects: Subject[];
   chatLanguage: ChatLanguage;
-  onStartSession: () => void;
   onOpenChat: (id: string) => void;
 }) {
   const [messages, setMessages] = useState<ChatMessage[]>(activeChat?.messages ?? []);
@@ -71,6 +65,7 @@ export function ChatView({
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId) ?? null;
+  const classLabel = classLevelOptions.find((o) => o.value === plan.classLevel)?.label[lang] ?? "";
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -90,7 +85,7 @@ export function ChatView({
   };
 
   const composer = (
-    <div className="mx-auto flex w-full max-w-2xl items-end gap-2 rounded-2xl border border-border bg-surface p-2.5 shadow-md">
+    <div className="mx-auto flex w-full max-w-2xl items-end gap-2 rounded-2xl border border-border bg-surface p-2.5 shadow-md transition-colors duration-150 focus-within:border-foreground-faint">
       <textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -102,7 +97,7 @@ export function ChatView({
         }}
         rows={1}
         placeholder={strings.chatPlaceholder[lang]}
-        className="max-h-40 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-foreground-muted"
+        className="max-h-40 flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-foreground-faint"
       />
       <button
         onClick={handleSend}
@@ -118,29 +113,16 @@ export function ChatView({
   if (messages.length === 0) {
     return (
       <div className="flex min-h-dvh flex-col items-center justify-center gap-8 p-6">
-        <DailyBriefing
-          lang={lang}
-          studentName={plan.name.trim()}
-          examDate={plan.examDate}
-          streakDays={streakDays}
-          yesterdayMinutes={placeholderYesterdayMinutes}
-          subjects={subjects}
-          weakSubjectIds={plan.weakSubjects}
-          onStartStudying={onStartSession}
-        />
-        <ContinueLearningCard lang={lang} subjects={subjects} onContinue={onStartSession} />
-        <AiRecommendationStrip
-          lang={lang}
-          subjects={subjects}
-          streakDays={streakDays}
-          onAction={onStartSession}
-        />
         <div className="flex flex-col items-center gap-4 text-center">
-          <div className="flex size-12 items-center justify-center rounded-2xl bg-accent-soft text-accent">
-            <Sparkles size={24} strokeWidth={1.75} />
-          </div>
+          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-foreground-muted">
+            {strings.academicAssistantLabel[lang]}
+            {classLabel && <span aria-hidden>·</span>}
+            {classLabel}
+            <span aria-hidden>·</span>
+            {strings.bangladeshCurriculumLabel[lang]}
+          </p>
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground-strong sm:text-3xl">
               {strings.chatGreeting[lang]}
             </h1>
             <p className="mx-auto mt-2 max-w-md text-sm text-foreground-muted">

@@ -10,7 +10,7 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 const tabs: { id: CanvasView; icon: LucideIcon; label: Record<Lang, string> }[] = [
   { id: "chat", icon: MessageSquare, label: strings.chat },
   { id: "study", icon: BookOpen, label: strings.studyPlan },
-  { id: "progress", icon: Gauge, label: strings.progress },
+  { id: "progress", icon: Gauge, label: strings.studentHub },
 ];
 
 export function BottomNav({
@@ -23,7 +23,7 @@ export function BottomNav({
   onSelect: (id: CanvasView) => void;
 }) {
   return (
-    <nav className="flex items-stretch border-t border-border bg-surface">
+    <nav className="flex items-stretch border-t border-border bg-sidebar">
       {tabs.map((tab) => {
         const isActive = active === tab.id;
         return (
@@ -31,7 +31,7 @@ export function BottomNav({
             key={tab.id}
             onClick={() => onSelect(tab.id)}
             className={`relative flex flex-1 flex-col items-center gap-1 py-3 text-xs transition-colors duration-150 active:scale-95 ${
-              isActive ? "font-medium text-accent" : "text-foreground-muted"
+              isActive ? "font-medium text-foreground-strong" : "text-foreground-muted"
             }`}
           >
             {isActive && (
