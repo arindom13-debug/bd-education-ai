@@ -245,7 +245,12 @@ export function ProgressView({
       ? 0
       : Math.round(subjects.reduce((sum, s) => sum + getSubjectProgress(s), 0) / subjects.length);
   const remaining = daysUntil(plan.examDate);
-  const weakSubjects = subjects.filter((s) => plan.weakSubjects.includes(s.id));
+  // Weak Topics is fully automatic: any chapter flagged "needs-revision" (by
+  // the AI or a manual status change) surfaces here on its own — no manual
+  // selection, no navigation elsewhere.
+  const weakChapterEntries = subjects.flatMap((s) =>
+    s.chapters.filter((c) => c.status === "needs-revision").map((c) => ({ subject: s, chapter: c }))
+  );
   // Every figure below reads from real completed sessions rather than a
   // parallel hardcoded array, so the hub can't disagree with the schedule.
   const today = todayKey();
@@ -648,33 +653,31 @@ export function ProgressView({
               <Section index={7}>
                 <Card>
                   <CardTitle icon={TrendingDown}>{strings.weakTopics[lang]}</CardTitle>
-                  {weakSubjects.length === 0 ? (
-                    <EmptyState
-                      icon={TrendingDown}
-                      title={strings.noWeakTopicsYet[lang]}
-                      description={strings.weakTopicsEmptyDesc[lang]}
-                      ctaLabel={strings.addWeakTopicsBtn[lang]}
-                      onCtaClick={() => onNavigate("setup")}
-                      compact
-                    />
+                  {weakChapterEntries.length === 0 ? (
+                    <div className="flex flex-col items-center gap-1.5 py-1 text-center">
+                      <div className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+                        <TrendingDown size={16} strokeWidth={1.75} />
+                      </div>
+                      <p className="text-xs font-medium">{strings.noWeakTopicsAutoTitle[lang]}</p>
+                      <p className="max-w-[240px] text-[11px] text-foreground-muted">
+                        {strings.noWeakTopicsAutoDesc[lang]}
+                      </p>
+                    </div>
                   ) : (
                     <div className="flex flex-col gap-3">
-                      {weakSubjects.map((s) => {
-                        const topic = getSubjectNextChapterLabel(s, lang);
-                        return (
-                          <div key={s.id} className="flex items-start justify-between gap-3">
-                            <div className="min-w-0">
-                              <span className="inline-block rounded-full border border-border bg-surface-muted px-2.5 py-1 text-xs font-medium text-foreground">
-                                {s.name[lang]}
-                              </span>
-                              {topic && <p className="mt-1.5 truncate text-sm font-medium">{topic}</p>}
-                            </div>
-                            <span className="shrink-0 text-xs text-foreground-faint">
-                              {strings.statusNeedsRevision[lang]}
+                      {weakChapterEntries.map(({ subject, chapter }) => (
+                        <div key={chapter.id} className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <span className="inline-block rounded-full border border-border bg-surface-muted px-2.5 py-1 text-xs font-medium text-foreground">
+                              {subject.name[lang]}
                             </span>
+                            <p className="mt-1.5 truncate text-sm font-medium">{chapter.name[lang]}</p>
                           </div>
-                        );
-                      })}
+                          <span className="shrink-0 text-xs text-foreground-faint">
+                            {strings.statusNeedsRevision[lang]}
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </Card>

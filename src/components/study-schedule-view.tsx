@@ -9,14 +9,12 @@ import type { StudyPlan } from "@/lib/study-plan";
 import {
   addDays,
   availableMinutesOn,
-  durationOptions,
   findChapter,
   findSubject,
   formatDuration,
   formatTime,
   minutesFromTime,
   nextUpcomingSession,
-  schedulableChapters,
   sessionsOn,
   todayKey,
   weekdayLabels,
@@ -27,8 +25,8 @@ import {
 } from "@/lib/study-schedule";
 import { formatClock, getRemainingMs, type TimerContext, type TimerState } from "@/lib/study-timer";
 import { useTimerNow } from "@/components/study-timer-controls";
-import { ChapterStatusTag, InputField, SelectField } from "@/components/schedule-fields";
 import { StartStudyForm } from "@/components/start-study-form";
+import { CreateSessionForm } from "@/components/create-session-form";
 import { PlanMyWeek } from "@/components/plan-my-week";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -131,98 +129,6 @@ function SessionRow({
         )}
       </div>
     </motion.div>
-  );
-}
-
-function CreateSessionForm({
-  lang,
-  subjects,
-  onCreate,
-}: {
-  lang: Lang;
-  subjects: Subject[];
-  onCreate: (draft: Omit<StudySession, "id" | "status">) => void;
-}) {
-  const [subjectId, setSubjectId] = useState(subjects[0]?.id ?? "");
-  const subject = subjects.find((s) => s.id === subjectId) ?? null;
-  const chapters = subject ? schedulableChapters(subject) : [];
-  const [chapterId, setChapterId] = useState(chapters[0]?.id ?? "");
-  const [date, setDate] = useState(todayKey());
-  const [startTime, setStartTime] = useState("17:00");
-  const [duration, setDuration] = useState(45);
-  const [goal, setGoal] = useState("");
-
-  const selectSubject = (id: string) => {
-    setSubjectId(id);
-    const next = subjects.find((s) => s.id === id);
-    setChapterId(next ? schedulableChapters(next)[0]?.id ?? "" : "");
-  };
-
-  const chapter = chapters.find((c) => c.id === chapterId) ?? null;
-
-  const submit = () => {
-    if (!subjectId) return;
-    onCreate({
-      subjectId,
-      chapterId: chapterId || null,
-      date,
-      startTime,
-      durationMinutes: duration,
-      goal: goal.trim() || undefined,
-    });
-    setGoal("");
-  };
-
-  return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <SelectField
-        label={strings.scheduleSubjectLabel[lang]}
-        value={subjectId}
-        onChange={selectSubject}
-        options={subjects.map((s) => ({ value: s.id, label: s.name[lang] }))}
-      />
-      <div className="flex flex-col gap-1">
-        <SelectField
-          label={strings.scheduleTopicLabel[lang]}
-          value={chapterId}
-          onChange={setChapterId}
-          options={[
-            { value: "", label: strings.scheduleWholeSubject[lang] },
-            ...chapters.map((c) => ({ value: c.id, label: c.name[lang] })),
-          ]}
-        />
-        {chapter && <ChapterStatusTag lang={lang} status={chapter.status} />}
-      </div>
-      <InputField label={strings.scheduleDateLabel[lang]} type="date" value={date} onChange={setDate} />
-      <InputField
-        label={strings.scheduleStartTimeLabel[lang]}
-        type="time"
-        value={startTime}
-        onChange={setStartTime}
-      />
-      <SelectField
-        label={strings.scheduleDurationLabel[lang]}
-        value={String(duration)}
-        onChange={(v) => setDuration(Number(v))}
-        options={durationOptions.map((d) => ({ value: String(d), label: `${d} ${strings.minutesWord[lang]}` }))}
-      />
-      <InputField
-        label={strings.scheduleGoalOptional[lang]}
-        value={goal}
-        onChange={setGoal}
-        placeholder={strings.scheduleGoalPlaceholder[lang]}
-      />
-      <div className="sm:col-span-2">
-        <button
-          onClick={submit}
-          disabled={!subjectId}
-          className="flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground transition-transform duration-150 active:scale-[0.98] disabled:opacity-40"
-        >
-          <Plus size={14} strokeWidth={2} />
-          {strings.scheduleAddSessionBtn[lang]}
-        </button>
-      </div>
-    </div>
   );
 }
 

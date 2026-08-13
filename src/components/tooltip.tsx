@@ -17,10 +17,12 @@ export function Tooltip({
   label,
   children,
   side = "bottom",
+  className = "",
 }: {
   label: string;
   children: React.ReactNode;
   side?: "top" | "bottom" | "left" | "right";
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -39,7 +41,7 @@ export function Tooltip({
 
   return (
     <span
-      className="relative inline-flex"
+      className={`relative inline-flex ${className}`}
       onMouseEnter={show}
       onMouseLeave={hide}
       onFocus={show}

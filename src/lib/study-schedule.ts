@@ -29,6 +29,10 @@ export type StudySession = {
   status: SessionStatus;
   /** Minutes actually studied — set when the session is completed. */
   completedMinutes?: number;
+  /** Provenance for the Plan My Week review step — "ai" means still exactly
+   * what the generator produced; absent/"student" means the student created
+   * or touched it. Mirrors Chapter.progressSource's ai-vs-manual pattern. */
+  source?: "ai" | "student";
 };
 
 /** Minutes per week the student wants to give each subject, keyed by subject id. */
@@ -314,6 +318,25 @@ export function availableMinutesOn(
   return Math.max(0, capacity - booked);
 }
 
+/** The first still-pending session that overlaps a candidate time range, if
+ * any — used to warn (never block) while editing a session's date/time. */
+export function findConflict(
+  sessions: StudySession[],
+  candidate: { date: string; startTime: string; durationMinutes: number },
+  excludeId?: string
+): StudySession | null {
+  const start = minutesFromTime(candidate.startTime);
+  const end = start + candidate.durationMinutes;
+  return (
+    sessions.find((s) => {
+      if (s.id === excludeId || s.date !== candidate.date || s.status !== "scheduled") return false;
+      const sStart = minutesFromTime(s.startTime);
+      const sEnd = sStart + s.durationMinutes;
+      return start < sEnd && sStart < end;
+    }) ?? null
+  );
+}
+
 // ------------------------------------------------------------------- ranking
 
 export type ChapterCandidate = {
@@ -455,6 +478,7 @@ function layOutDay(
       startTime: timeFromMinutes(cursor),
       durationMinutes: pick.minutes,
       status: "scheduled",
+      source: "ai",
     });
     cursor += pick.minutes + breakMinutes;
   }

@@ -1,16 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { Play, Pause, RotateCcw, Plus, Sparkles, FileCheck2, Check } from "lucide-react";
-import { strings, type Lang } from "@/lib/i18n";
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
-  notebookEntries,
-  aiNotebookEntries,
-  mistakeBookEntries,
-  savedAnswers,
-  roadmapWeeks,
-  alarmSounds,
-} from "@/lib/tools-data";
+  Play,
+  Pause,
+  RotateCcw,
+  Plus,
+  Sparkles,
+  FileCheck2,
+  Check,
+  Search,
+  Pin,
+  Trash2,
+  ChevronLeft,
+  ChevronRight,
+} from "lucide-react";
+import { strings, type Lang } from "@/lib/i18n";
+import { subjects as curriculumSubjects } from "@/lib/curriculum-data";
+import { aiNotebookEntries, mistakeBookEntries, savedAnswers, roadmapWeeks, alarmSounds } from "@/lib/tools-data";
 import {
   cyclePosition,
   formatClock,
@@ -20,6 +28,18 @@ import {
   type TimerState,
 } from "@/lib/study-timer";
 import { CycleDots, TimerSettingsForm, useTimerNow } from "@/components/study-timer-controls";
+import {
+  createDraftNote,
+  isEmptyNote,
+  loadNotes,
+  matchesQuery,
+  saveNotes,
+  sortNotes,
+  timeAgo,
+  type Note,
+} from "@/lib/notebook";
+
+const EASE = [0.16, 1, 0.3, 1] as const;
 
 export function StudyTimerPanel({
   lang,
@@ -158,27 +178,434 @@ export function StudyTimerPanel({
   );
 }
 
+function NoteCard({
+  lang,
+  note,
+  subjectName,
+  onOpen,
+  onTogglePin,
+}: {
+  lang: Lang;
+  note: Note;
+  subjectName: string | null;
+  onOpen: () => void;
+  onTogglePin: () => void;
+}) {
+  const snippet = note.content.trim();
+  return (
+    <motion.div
+      whileHover={{ y: -2 }}
+      transition={{ duration: 0.15, ease: EASE }}
+      className="group relative rounded-xl border border-border p-3.5 transition-colors duration-150 hover:border-foreground-faint hover:bg-surface-muted"
+    >
+      <button
+        type="button"
+        onClick={onOpen}
+        aria-label={note.title.trim() || strings.noteTitlePlaceholder[lang]}
+        className="absolute inset-0 z-0 rounded-xl"
+      />
+      <div className="pointer-events-none relative z-0 pr-6">
+        <div className="flex items-center justify-between gap-2">
+          <p className="min-w-0 flex-1 truncate text-sm font-medium">
+            {note.title.trim() || strings.noteTitlePlaceholder[lang]}
+          </p>
+          <span className="shrink-0 text-[10px] text-foreground-faint">
+            {strings.noteUpdatedPrefix[lang]} {timeAgo(note.updatedAt, lang)}
+          </span>
+        </div>
+        {snippet && <p className="mt-1 line-clamp-2 text-xs text-foreground-muted">{snippet}</p>}
+        {subjectName && (
+          <span className="mt-2 inline-block rounded-full border border-border px-2 py-0.5 text-[10px] text-foreground-muted">
+            {subjectName}
+          </span>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          onTogglePin();
+        }}
+        aria-label={note.pinned ? strings.notePinnedLabel[lang] : strings.notePinLabel[lang]}
+        className={`pointer-events-auto absolute right-2.5 top-2.5 z-10 rounded-md p-1 transition-colors duration-150 ${
+          note.pinned
+            ? "text-foreground-strong"
+            : "text-foreground-faint opacity-0 hover:text-foreground focus-visible:opacity-100 group-hover:opacity-100"
+        }`}
+      >
+        <Pin size={13} strokeWidth={1.75} className={note.pinned ? "fill-current" : ""} />
+      </button>
+    </motion.div>
+  );
+}
+
+function NoteEditorView({
+  lang,
+  note,
+  saveState,
+  onChange,
+  onClose,
+  onDelete,
+}: {
+  lang: Lang;
+  note: Note;
+  saveState: "idle" | "saving" | "saved";
+  onChange: (patch: Partial<Note>) => void;
+  onClose: () => void;
+  onDelete?: () => void;
+}) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [aiOpen, setAiOpen] = useState(Boolean(note.chapterId || note.sourceTopic));
+  const contentRef = useRef<HTMLTextAreaElement>(null);
+  const subject = curriculumSubjects.find((s) => s.id === note.subjectId) ?? null;
+  const chapters = subject ? subject.chapters : [];
+
+  return (
+    <div
+      className="flex flex-col gap-4"
+      onKeyDown={(e) => {
+        if (e.key === "Escape") {
+          e.preventDefault();
+          onClose();
+        }
+      }}
+    >
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex items-center gap-1 text-xs font-medium text-foreground-muted transition-colors duration-150 hover:text-foreground"
+        >
+          <ChevronLeft size={14} strokeWidth={1.75} />
+          {strings.noteBackToNotes[lang]}
+        </button>
+        <AnimatePresence mode="wait">
+          {saveState !== "idle" && (
+            <motion.span
+              key={saveState}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.15, ease: EASE }}
+              className="text-[11px] text-foreground-faint"
+            >
+              {saveState === "saving" ? strings.noteSaving[lang] : strings.noteSaved[lang]}
+            </motion.span>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <input
+        autoFocus
+        value={note.title}
+        onChange={(e) => onChange({ title: e.target.value })}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            contentRef.current?.focus();
+          }
+        }}
+        placeholder={strings.noteTitlePlaceholder[lang]}
+        className="w-full bg-transparent text-lg font-semibold tracking-tight text-foreground-strong outline-none placeholder:text-foreground-faint"
+      />
+
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={note.subjectId ?? ""}
+          onChange={(e) => onChange({ subjectId: e.target.value || null, chapterId: null })}
+          className="rounded-lg border border-border bg-control px-2.5 py-1.5 text-xs outline-none transition-colors duration-150 hover:border-foreground-faint focus:border-foreground-faint"
+        >
+          <option value="">{strings.noteNoSubject[lang]}</option>
+          {curriculumSubjects.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name[lang]}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={() => onChange({ pinned: !note.pinned })}
+          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs font-medium transition-colors duration-150 ${
+            note.pinned
+              ? "border-accent bg-surface-muted text-foreground-strong"
+              : "border-border text-foreground-muted hover:border-foreground-faint hover:text-foreground"
+          }`}
+        >
+          <Pin size={12} strokeWidth={1.75} className={note.pinned ? "fill-current" : ""} />
+          {note.pinned ? strings.notePinnedLabel[lang] : strings.notePinLabel[lang]}
+        </button>
+      </div>
+
+      <textarea
+        ref={contentRef}
+        value={note.content}
+        onChange={(e) => onChange({ content: e.target.value })}
+        placeholder={strings.noteContentPlaceholder[lang]}
+        rows={10}
+        className="min-h-48 w-full resize-y rounded-lg border border-border bg-control px-3 py-2.5 text-sm leading-relaxed outline-none transition-colors duration-150 focus:border-foreground-faint"
+      />
+
+      <div className="border-t border-border pt-3">
+        <button
+          type="button"
+          onClick={() => setAiOpen((o) => !o)}
+          aria-expanded={aiOpen}
+          className="flex w-full items-center gap-1 text-xs font-medium text-foreground-muted transition-colors duration-150 hover:text-foreground"
+        >
+          <motion.span
+            animate={{ rotate: aiOpen ? 90 : 0 }}
+            transition={{ duration: 0.2, ease: EASE }}
+            className="flex"
+          >
+            <ChevronRight size={12} strokeWidth={2} />
+          </motion.span>
+          {strings.noteAiConnectionLabel[lang]}
+        </button>
+        <AnimatePresence initial={false}>
+          {aiOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ duration: 0.2, ease: EASE }}
+              className="overflow-hidden"
+            >
+              <div className="flex flex-col gap-3 pt-3">
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
+                    {strings.noteChapterLabel[lang]}
+                  </span>
+                  <select
+                    value={note.chapterId ?? ""}
+                    onChange={(e) => onChange({ chapterId: e.target.value || null })}
+                    disabled={!subject}
+                    className="rounded-lg border border-border bg-control px-2.5 py-1.5 text-xs outline-none transition-colors duration-150 hover:border-foreground-faint focus:border-foreground-faint disabled:opacity-40"
+                  >
+                    <option value="">{strings.noteChapterNone[lang]}</option>
+                    {chapters.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name[lang]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1">
+                  <span className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
+                    {strings.noteSourceLabel[lang]}
+                  </span>
+                  <input
+                    value={note.sourceTopic ?? ""}
+                    onChange={(e) => onChange({ sourceTopic: e.target.value })}
+                    placeholder={strings.noteSourcePlaceholder[lang]}
+                    className="rounded-lg border border-border bg-control px-2.5 py-1.5 text-xs outline-none transition-colors duration-150 focus:border-foreground-faint"
+                  />
+                </label>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {onDelete && (
+        <div className="border-t border-border pt-3">
+          {confirmDelete ? (
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-border bg-surface-muted px-3 py-2.5">
+              <div>
+                <p className="text-xs font-medium text-foreground">{strings.noteDeleteConfirm[lang]}</p>
+                <p className="text-[11px] text-foreground-muted">{strings.noteDeleteConfirmDesc[lang]}</p>
+              </div>
+              <div className="flex shrink-0 gap-1.5">
+                <button
+                  onClick={() => setConfirmDelete(false)}
+                  className="rounded-md border border-border px-2.5 py-1 text-[11px] text-foreground-muted transition-colors duration-150 hover:text-foreground"
+                >
+                  {strings.cancelBtn[lang]}
+                </button>
+                <button onClick={onDelete} className="rounded-md bg-danger px-2.5 py-1 text-[11px] font-medium text-white">
+                  {strings.confirmBtn[lang]}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmDelete(true)}
+              className="flex items-center gap-1.5 text-xs font-medium text-foreground-muted transition-colors duration-150 hover:text-danger"
+            >
+              <Trash2 size={12} strokeWidth={1.75} />
+              {strings.noteDeleteBtn[lang]}
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const filterChipClass = (active: boolean) =>
+  `rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors duration-150 ${
+    active
+      ? "border-accent bg-surface-muted text-foreground-strong"
+      : "border-border text-foreground-muted hover:border-foreground-faint hover:text-foreground"
+  }`;
+
 export function NotebookPanel({ lang }: { lang: Lang }) {
+  const [notes, setNotes] = useState<Note[]>(() => loadNotes());
+  const [query, setQuery] = useState("");
+  const [subjectFilter, setSubjectFilter] = useState<string>("all");
+  const [draft, setDraft] = useState<Note | null>(null);
+  const [editorMode, setEditorMode] = useState<"new" | "edit" | null>(null);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const draftRef = useRef<Note | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+  useEffect(
+    () => () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    },
+    []
+  );
+
+  const persist = (updater: (prev: Note[]) => Note[]) => {
+    setNotes((prev) => {
+      const next = updater(prev);
+      saveNotes(next);
+      return next;
+    });
+  };
+
+  const commitDraft = () => {
+    const current = draftRef.current;
+    if (!current) return;
+    persist((prev) => {
+      const exists = prev.some((n) => n.id === current.id);
+      return exists ? prev.map((n) => (n.id === current.id ? current : n)) : [...prev, current];
+    });
+    setSaveState("saved");
+  };
+
+  const updateDraft = (patch: Partial<Note>) => {
+    setDraft((d) => (d ? { ...d, ...patch, updatedAt: Date.now() } : d));
+    setSaveState("saving");
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(commitDraft, 500);
+  };
+
+  const openNote = (note: Note) => {
+    setDraft({ ...note });
+    setEditorMode("edit");
+    setSaveState("saved");
+  };
+  const openNewNote = () => {
+    setDraft(createDraftNote());
+    setEditorMode("new");
+    setSaveState("idle");
+  };
+  const closeEditor = () => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    const current = draftRef.current;
+    if (current && !(editorMode === "new" && isEmptyNote(current))) {
+      persist((prev) => {
+        const exists = prev.some((n) => n.id === current.id);
+        return exists ? prev.map((n) => (n.id === current.id ? current : n)) : [...prev, current];
+      });
+    }
+    setDraft(null);
+    setEditorMode(null);
+    setSaveState("idle");
+  };
+  const deleteNote = (id: string) => {
+    persist((prev) => prev.filter((n) => n.id !== id));
+    setDraft(null);
+    setEditorMode(null);
+  };
+  const togglePinInList = (id: string) => {
+    persist((prev) => prev.map((n) => (n.id === id ? { ...n, pinned: !n.pinned } : n)));
+  };
+
+  const subjectIdsWithNotes = Array.from(new Set(notes.map((n) => n.subjectId).filter((id): id is string => !!id)));
+  const filterableSubjects = curriculumSubjects.filter((s) => subjectIdsWithNotes.includes(s.id));
+  const visibleNotes = sortNotes(
+    notes.filter((n) => matchesQuery(n, query) && (subjectFilter === "all" || n.subjectId === subjectFilter))
+  );
+
+  if (draft) {
+    return (
+      <NoteEditorView
+        lang={lang}
+        note={draft}
+        saveState={saveState}
+        onChange={updateDraft}
+        onClose={closeEditor}
+        onDelete={editorMode === "edit" ? () => deleteNote(draft.id) : undefined}
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3">
-      <button className="flex items-center gap-1.5 self-start rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground-muted hover:text-foreground">
-        <Plus size={13} strokeWidth={1.75} />
-        {strings.newNote[lang]}
-      </button>
-      <div className="flex flex-col gap-2">
-        {notebookEntries.map((n, i) => (
-          <div key={i} className="rounded-xl border border-border p-3.5">
-            <div className="flex items-center justify-between gap-2">
-              <p className="min-w-0 flex-1 truncate text-sm font-medium">{n.title[lang]}</p>
-              <span className="shrink-0 text-xs text-foreground-muted">{n.date[lang]}</span>
-            </div>
-            <p className="mt-1 text-xs text-foreground-muted">{n.snippet[lang]}</p>
-            <span className="mt-2 inline-block rounded-full border border-border px-2 py-0.5 text-[10px] text-foreground-muted">
-              {n.subject[lang]}
-            </span>
-          </div>
-        ))}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <button
+          onClick={openNewNote}
+          className="flex items-center gap-1.5 self-start rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-foreground-muted transition-colors duration-150 hover:text-foreground"
+        >
+          <Plus size={13} strokeWidth={1.75} />
+          {strings.newNote[lang]}
+        </button>
+        <div className="relative">
+          <Search
+            size={13}
+            strokeWidth={1.75}
+            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-foreground-faint"
+          />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={strings.noteSearchPlaceholder[lang]}
+            className="w-full rounded-lg border border-border bg-control py-1.5 pl-7 pr-3 text-xs outline-none transition-colors duration-150 focus:border-foreground-faint sm:w-52"
+          />
+        </div>
       </div>
+
+      {filterableSubjects.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          <button onClick={() => setSubjectFilter("all")} className={filterChipClass(subjectFilter === "all")}>
+            {strings.noteAllSubjects[lang]}
+          </button>
+          {filterableSubjects.map((s) => (
+            <button key={s.id} onClick={() => setSubjectFilter(s.id)} className={filterChipClass(subjectFilter === s.id)}>
+              {s.name[lang]}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {visibleNotes.length === 0 ? (
+        <div className="flex flex-col items-center gap-1 py-6 text-center">
+          <p className="text-xs font-medium text-foreground">
+            {notes.length === 0 ? strings.noteEmptyTitle[lang] : strings.noteNoResultsTitle[lang]}
+          </p>
+          <p className="max-w-[240px] text-[11px] text-foreground-muted">
+            {notes.length === 0 ? strings.noteEmptyDesc[lang] : strings.noteNoResultsDesc[lang]}
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {visibleNotes.map((n) => (
+            <NoteCard
+              key={n.id}
+              lang={lang}
+              note={n}
+              subjectName={n.subjectId ? curriculumSubjects.find((s) => s.id === n.subjectId)?.name[lang] ?? null : null}
+              onOpen={() => openNote(n)}
+              onTogglePin={() => togglePinInList(n.id)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
