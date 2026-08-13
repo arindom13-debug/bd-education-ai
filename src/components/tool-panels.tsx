@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Play, Pause, RotateCcw, Plus, Sparkles, FileCheck2, Check } from "lucide-react";
 import { strings, type Lang } from "@/lib/i18n";
 import {
@@ -9,99 +9,119 @@ import {
   mistakeBookEntries,
   savedAnswers,
   roadmapWeeks,
-  timerPresets,
   alarmSounds,
 } from "@/lib/tools-data";
+import {
+  cyclePosition,
+  formatClock,
+  getRemainingMs,
+  studyTimerPresets,
+  type TimerActions,
+  type TimerState,
+} from "@/lib/study-timer";
+import { CycleDots, TimerSettingsForm, useTimerNow } from "@/components/study-timer-controls";
 
-export function StudyTimerPanel({ lang }: { lang: Lang }) {
-  const [presetIndex, setPresetIndex] = useState(0);
-  const [secondsLeft, setSecondsLeft] = useState(timerPresets[0].minutes * 60);
-  const [running, setRunning] = useState(false);
-  const [alarmOn, setAlarmOn] = useState(true);
-  const [soundIndex, setSoundIndex] = useState(0);
-
-  useEffect(() => {
-    if (!running) return;
-    const id = setInterval(() => {
-      setSecondsLeft((s) => {
-        if (s <= 1) {
-          setRunning(false);
-          return 0;
-        }
-        return s - 1;
-      });
-    }, 1000);
-    return () => clearInterval(id);
-  }, [running]);
-
-  const selectPreset = (i: number) => {
-    setPresetIndex(i);
-    setSecondsLeft(timerPresets[i].minutes * 60);
-    setRunning(false);
-  };
-
-  const minutes = Math.floor(secondsLeft / 60).toString().padStart(2, "0");
-  const seconds = (secondsLeft % 60).toString().padStart(2, "0");
+export function StudyTimerPanel({
+  lang,
+  timer,
+  actions,
+}: {
+  lang: Lang;
+  timer: TimerState;
+  actions: TimerActions;
+}) {
+  const now = useTimerNow(timer.status);
+  const remainingMs = getRemainingMs(timer, now);
+  const active = timer.status === "running" || timer.status === "paused";
+  const cycle = cyclePosition(timer);
+  const phaseLabel =
+    timer.phase === "focus"
+      ? strings.timerPhaseFocus[lang]
+      : timer.phase === "break"
+      ? strings.timerPhaseBreak[lang]
+      : strings.timerPhaseLongBreak[lang];
 
   return (
     <div className="flex flex-col gap-5">
-      <div className="flex justify-center gap-2">
-        {timerPresets.map((p, i) => (
-          <button
-            key={p.minutes}
-            onClick={() => selectPreset(i)}
-            className={`rounded-full border px-3.5 py-1.5 text-xs font-medium ${
-              presetIndex === i
-                ? "border-accent bg-accent-soft text-accent"
-                : "border-border text-foreground-muted"
-            }`}
-          >
-            {p.label[lang]}
-          </button>
-        ))}
-      </div>
-
-      <div className="text-center text-5xl font-semibold tabular-nums tracking-tight">
-        {minutes}:{seconds}
-      </div>
-
-      <div className="flex justify-center gap-2">
-        <button
-          onClick={() => setRunning((r) => !r)}
-          className="flex items-center gap-1.5 rounded-lg bg-accent px-5 py-2 text-sm font-medium text-accent-foreground"
-        >
-          {running ? <Pause size={15} strokeWidth={2} /> : <Play size={15} strokeWidth={2} />}
-          {running ? strings.timerPause[lang] : strings.timerStart[lang]}
-        </button>
-        <button
-          onClick={() => selectPreset(presetIndex)}
-          className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm text-foreground-muted hover:text-foreground"
-        >
-          <RotateCcw size={15} strokeWidth={1.75} />
-          {strings.timerReset[lang]}
-        </button>
-      </div>
-
       <div className="rounded-xl border border-border p-4">
+        <div className="mb-3 flex items-center justify-between">
+          <p className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
+            {strings.timerCurrentSessionLabel[lang]}
+          </p>
+          <CycleDots completed={cycle.completed} total={cycle.total} />
+        </div>
+        {active ? (
+          <div className="flex flex-col items-center gap-4">
+            <div className="text-center">
+              <p className="text-sm font-medium text-foreground-strong">{phaseLabel}</p>
+              <p className="text-5xl font-semibold tabular-nums tracking-tight">{formatClock(remainingMs)}</p>
+              <p className="text-xs text-foreground-muted">{strings.timerRemainingLabel[lang]}</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => (timer.status === "running" ? actions.pause() : actions.resume())}
+                className="flex items-center gap-1.5 rounded-lg bg-accent px-5 py-2 text-sm font-medium text-accent-foreground"
+              >
+                {timer.status === "running" ? <Pause size={15} strokeWidth={2} /> : <Play size={15} strokeWidth={2} />}
+                {timer.status === "running" ? strings.timerPause[lang] : strings.timerResume[lang]}
+              </button>
+              <button
+                onClick={() => actions.reset()}
+                className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm text-foreground-muted hover:text-foreground"
+              >
+                <RotateCcw size={15} strokeWidth={1.75} />
+                {strings.timerReset[lang]}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col items-center gap-3 py-2 text-center">
+            <p className="text-sm font-medium text-foreground-strong">{strings.timerNoActiveSession[lang]}</p>
+            <p className="text-xs text-foreground-muted">{strings.timerNoActiveSessionDesc[lang]}</p>
+            <button
+              onClick={() => actions.start("focus")}
+              className="mt-1 flex items-center gap-1.5 rounded-lg bg-accent px-5 py-2 text-sm font-medium text-accent-foreground"
+            >
+              <Play size={15} strokeWidth={2} />
+              {strings.timerStart[lang]}
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-4 rounded-xl border border-border p-4">
+        <p className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
+          {strings.timerSessionSettingsLabel[lang]}
+        </p>
+        <TimerSettingsForm lang={lang} settings={timer.settings} actions={actions} showPreview={false} />
+        <label className="flex items-center justify-between text-sm">
+          <span>{strings.timerAutoStartLabel[lang]}</span>
+          <input
+            type="checkbox"
+            checked={timer.settings.autoStartNext}
+            onChange={(e) => actions.updateSettings({ autoStartNext: e.target.checked })}
+            className="size-4 accent-accent"
+          />
+        </label>
         <label className="flex items-center justify-between text-sm">
           <span>{strings.alarmToggleLabel[lang]}</span>
           <input
             type="checkbox"
-            checked={alarmOn}
-            onChange={(e) => setAlarmOn(e.target.checked)}
+            checked={timer.settings.alarmOn}
+            onChange={(e) => actions.updateSettings({ alarmOn: e.target.checked })}
             className="size-4 accent-accent"
           />
         </label>
-        {alarmOn && (
-          <>
-            <p className="mt-3 text-xs text-foreground-muted">{strings.alarmSoundLabel[lang]}</p>
+        {timer.settings.alarmOn && (
+          <div>
+            <p className="text-xs text-foreground-muted">{strings.alarmSoundLabel[lang]}</p>
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {alarmSounds.map((s, i) => (
                 <button
                   key={s.en}
-                  onClick={() => setSoundIndex(i)}
+                  onClick={() => actions.updateSettings({ alarmSoundIndex: i })}
                   className={`rounded-full border px-3 py-1 text-xs ${
-                    soundIndex === i
+                    timer.settings.alarmSoundIndex === i
                       ? "border-accent bg-accent-soft text-accent"
                       : "border-border text-foreground-muted"
                   }`}
@@ -110,8 +130,29 @@ export function StudyTimerPanel({ lang }: { lang: Lang }) {
                 </button>
               ))}
             </div>
-          </>
+          </div>
         )}
+      </div>
+
+      <div className="flex flex-col gap-3">
+        <p className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
+          {strings.timerPresetsLabel[lang]}
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {studyTimerPresets.map((p) => (
+            <button
+              key={p.id}
+              onClick={() => actions.applyPreset(p)}
+              className="rounded-xl border border-border p-3.5 text-left transition-colors duration-150 hover:bg-surface-muted"
+            >
+              <p className="text-sm font-medium">{p.label[lang]}</p>
+              <p className="mt-0.5 text-xs text-foreground-muted">
+                {p.focusMinutes} {strings.minutesWord[lang]} · {p.breakMinutes} {strings.minutesWord[lang]}{" "}
+                {strings.timerBreakLabel[lang]}
+              </p>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

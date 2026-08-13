@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { MessageSquare, BookOpen, Gauge, type LucideIcon } from "lucide-react";
+import { MessageSquare, BookOpen, CalendarClock, Gauge, type LucideIcon } from "lucide-react";
 import { strings, type Lang } from "@/lib/i18n";
 import type { CanvasView } from "@/components/sidebar";
 
@@ -10,6 +10,7 @@ const EASE = [0.16, 1, 0.3, 1] as const;
 const tabs: { id: CanvasView; icon: LucideIcon; label: Record<Lang, string> }[] = [
   { id: "chat", icon: MessageSquare, label: strings.chat },
   { id: "study", icon: BookOpen, label: strings.studyPlan },
+  { id: "schedule", icon: CalendarClock, label: strings.scheduleNav },
   { id: "progress", icon: Gauge, label: strings.studentHub },
 ];
 

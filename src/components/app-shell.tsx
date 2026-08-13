@@ -21,6 +21,36 @@ import { subjects as initialSubjects, type Subject, type Chapter, type ChapterSt
 import { loadChatLanguage, saveChatLanguage, type ChatLanguage } from "@/lib/chat-language";
 import { defaultCountdowns, getMainCountdown, type Countdown } from "@/lib/countdowns";
 import { MainCountdownStrip } from "@/components/main-countdown-strip";
+import { StudyTimerPill } from "@/components/study-timer-pill";
+import { StudyScheduleView } from "@/components/study-schedule-view";
+import {
+  loadTimerState,
+  saveTimerState,
+  startPhase,
+  quickStart,
+  startSessionPhase,
+  endSession,
+  elapsedMs,
+  pauseTimer,
+  resumeTimer,
+  resetTimer,
+  markCompleted,
+  dismissCompletion,
+  applySettings,
+  applyPreset,
+  nextPhaseFor,
+  type TimerState,
+  type TimerActions,
+  type TimerContext,
+} from "@/lib/study-timer";
+import {
+  loadScheduleState,
+  saveScheduleState,
+  todayKey,
+  type ScheduleState,
+  type StudySession,
+  type TimeSlot,
+} from "@/lib/study-schedule";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 const SIDEBAR_COLLAPSED_KEY = "arindoms-ai-sidebar-collapsed";
@@ -85,6 +115,110 @@ export function AppShell() {
   const isDraggingSidebar = isResizing || isRevealing;
   const asideWidth = isResizing && dragWidth !== null ? dragWidth : sidebarWidth;
   const [studySessionActive, setStudySessionActive] = useState(false);
+
+  // Global study timer — a single source of truth that lives here, not on
+  // any one page, so it keeps counting down (and stays accurate across
+  // reloads) no matter where the student navigates. See lib/study-timer.ts
+  // for why this stores an end timestamp instead of a decrementing counter.
+  const [timerState, setTimerState] = useState<TimerState>(() => loadTimerState());
+  const commitTimer = (next: TimerState) => {
+    setTimerState(next);
+    saveTimerState(next);
+  };
+
+  // Study schedule — the layer that decides *what* the timer is counting.
+  // Sessions reference curriculum ids only, so schedule, Study Plan, and
+  // progress can never disagree about a chapter.
+  const [scheduleState, setScheduleState] = useState<ScheduleState>(() => loadScheduleState());
+  const commitSchedule = (next: ScheduleState) => {
+    setScheduleState(next);
+    saveScheduleState(next);
+  };
+
+  /** Banks finished study time. A scheduled session is marked complete in
+   * place; an ad-hoc one is appended, so history and weekly targets count
+   * both kinds without a second store. */
+  const recordStudiedTime = (context: TimerContext, minutes: number) => {
+    if (minutes <= 0) return;
+    setScheduleState((prev) => {
+      const existing = context.sessionId && prev.sessions.some((s) => s.id === context.sessionId);
+      const sessions: StudySession[] = existing
+        ? prev.sessions.map((s) =>
+            s.id === context.sessionId ? { ...s, status: "completed" as const, completedMinutes: minutes } : s
+          )
+        : [
+            ...prev.sessions,
+            {
+              id: `session-${Date.now()}`,
+              subjectId: context.subjectId,
+              chapterId: context.chapterId,
+              date: todayKey(),
+              startTime: new Date().toTimeString().slice(0, 5),
+              durationMinutes: minutes,
+              goal: context.goal,
+              status: "completed" as const,
+              completedMinutes: minutes,
+            },
+          ];
+      const next = { ...prev, sessions };
+      saveScheduleState(next);
+      return next;
+    });
+  };
+
+  // Fires exactly when the running phase runs out, rather than polling every
+  // second. loadTimerState() covers the case where it expired while away.
+  useEffect(() => {
+    if (timerState.status !== "running" || timerState.endAt === null) return;
+    const id = setTimeout(() => {
+      const finishedFocus = timerState.phase === "focus" && timerState.context;
+      if (finishedFocus && timerState.context) {
+        recordStudiedTime(timerState.context, Math.round(timerState.phaseDurationMs / 60_000));
+      }
+      const completed = { ...markCompleted(timerState), context: finishedFocus ? null : timerState.context };
+      commitTimer(
+        completed.settings.autoStartNext ? startPhase(completed, nextPhaseFor(completed)) : completed
+      );
+    }, Math.max(0, timerState.endAt - Date.now()));
+    return () => clearTimeout(id);
+  }, [timerState]);
+
+  const timerActions: TimerActions = {
+    start: (phase) => commitTimer(startPhase(timerState, phase)),
+    quickStart: (focusMinutes, breakMinutes) => commitTimer(quickStart(timerState, focusMinutes, breakMinutes)),
+    startSession: (context, minutes) => commitTimer(startSessionPhase(timerState, context, minutes)),
+    endSession: () => {
+      if (timerState.context) {
+        recordStudiedTime(timerState.context, Math.round(elapsedMs(timerState) / 60_000));
+      }
+      commitTimer(endSession(timerState));
+    },
+    pause: () => commitTimer(pauseTimer(timerState)),
+    resume: () => commitTimer(resumeTimer(timerState)),
+    reset: () => commitTimer(resetTimer(timerState)),
+    applyPreset: (preset) => commitTimer(applyPreset(timerState, preset)),
+    updateSettings: (patch) => commitTimer(applySettings(timerState, patch)),
+    dismissCompletion: () => commitTimer(dismissCompletion(timerState)),
+  };
+
+  const addScheduledSession = (draft: Omit<StudySession, "id" | "status">) =>
+    commitSchedule({
+      ...scheduleState,
+      sessions: [...scheduleState.sessions, { ...draft, id: `session-${Date.now()}`, status: "scheduled" }],
+    });
+  const deleteScheduledSession = (id: string) =>
+    commitSchedule({ ...scheduleState, sessions: scheduleState.sessions.filter((s) => s.id !== id) });
+  /** Plan My Week replaces only the still-pending sessions — completed history
+   * is never discarded by regenerating a plan. */
+  const replaceUpcomingWeek = (generated: StudySession[]) =>
+    commitSchedule({
+      ...scheduleState,
+      sessions: [...scheduleState.sessions.filter((s) => s.status !== "scheduled"), ...generated],
+    });
+  const updateWeeklyTargets = (weeklyTargets: Record<string, number>) =>
+    commitSchedule({ ...scheduleState, weeklyTargets });
+  const updateAvailability = (availability: TimeSlot[][]) => commitSchedule({ ...scheduleState, availability });
+
   const [chatLanguage, setChatLanguageState] = useState<ChatLanguage>(() => loadChatLanguage());
   const setChatLanguage = (value: ChatLanguage) => {
     setChatLanguageState(value);
@@ -330,6 +464,9 @@ export function AppShell() {
       </AnimatePresence>
       {!studySessionActive && (
     <div className="min-h-dvh" style={{ "--sidebar-w": `${asideWidth}px` } as React.CSSProperties}>
+      <div className="fixed right-4 top-4 z-30 hidden md:block">
+        <StudyTimerPill lang={lang} timer={timerState} actions={timerActions} subjects={subjects} />
+      </div>
       <aside
         style={{
           width: asideWidth,
@@ -358,6 +495,8 @@ export function AppShell() {
           chatLanguage={chatLanguage}
           onChangeChatLanguage={setChatLanguage}
           mainCountdown={mainCountdown}
+          timer={timerState}
+          subjects={subjects}
         />
         {!sidebarCollapsed && (
           <div
@@ -407,6 +546,7 @@ export function AppShell() {
           <span className="text-[15px] font-semibold tracking-tight">{strings.appName[lang]}</span>
         </div>
         <div className="flex items-center gap-1.5">
+          <StudyTimerPill lang={lang} timer={timerState} actions={timerActions} subjects={subjects} />
           <button
             onClick={toggleLang}
             className="rounded-md border border-border px-2 py-1 text-xs text-foreground-muted transition-colors duration-150 hover:text-foreground"
@@ -455,6 +595,9 @@ export function AppShell() {
                 plan={plan}
                 onNavigate={selectView}
                 subjects={subjects}
+                schedule={scheduleState}
+                sessionMinutes={timerState.settings.focusMinutes}
+                onStartSession={timerActions.startSession}
               />
             )}
             {view === "study" && (
@@ -476,8 +619,23 @@ export function AppShell() {
                 onStartSession={() => setStudySessionActive(true)}
               />
             )}
+            {view === "schedule" && (
+              <StudyScheduleView
+                lang={lang}
+                subjects={subjects}
+                plan={plan}
+                schedule={scheduleState}
+                timer={timerState}
+                onAddSession={addScheduledSession}
+                onDeleteSession={deleteScheduledSession}
+                onReplaceWeek={replaceUpcomingWeek}
+                onUpdateTargets={updateWeeklyTargets}
+                onUpdateAvailability={updateAvailability}
+                onStartSession={timerActions.startSession}
+              />
+            )}
             {view === "setup" && (
-              <SetupView lang={lang} plan={plan} onChange={updatePlan} onFinish={() => selectView("chat")} />
+              <SetupView lang={lang} plan={plan} onChange={updatePlan} />
             )}
             {view === "tools" && (
               <ToolsView
@@ -488,6 +646,8 @@ export function AppShell() {
                 onDeleteCountdown={deleteCountdown}
                 onSetMainCountdown={setMainCountdown}
                 onReorderCountdowns={reorderCountdowns}
+                timer={timerState}
+                timerActions={timerActions}
               />
             )}
             {view === "examMode" && (
@@ -526,6 +686,8 @@ export function AppShell() {
             chatLanguage={chatLanguage}
             onChangeChatLanguage={setChatLanguage}
             mainCountdown={mainCountdown}
+            timer={timerState}
+            subjects={subjects}
           />
         </div>
         <button

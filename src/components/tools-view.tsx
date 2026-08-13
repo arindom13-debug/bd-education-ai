@@ -8,6 +8,7 @@ import { strings, type Lang } from "@/lib/i18n";
 import type { ToolId } from "@/lib/tools-data";
 import { notebookEntries } from "@/lib/tools-data";
 import type { Countdown } from "@/lib/countdowns";
+import type { TimerActions, TimerState } from "@/lib/study-timer";
 import {
   StudyTimerPanel,
   NotebookPanel,
@@ -92,6 +93,8 @@ function ToolPanel({
   onDeleteCountdown,
   onSetMainCountdown,
   onReorderCountdowns,
+  timer,
+  timerActions,
 }: {
   id: ToolId;
   lang: Lang;
@@ -101,10 +104,12 @@ function ToolPanel({
   onDeleteCountdown: (id: string) => void;
   onSetMainCountdown: (id: string) => void;
   onReorderCountdowns: (countdowns: Countdown[]) => void;
+  timer: TimerState;
+  timerActions: TimerActions;
 }) {
   switch (id) {
     case "timer":
-      return <StudyTimerPanel lang={lang} />;
+      return <StudyTimerPanel lang={lang} timer={timer} actions={timerActions} />;
     case "notebook":
       return <NotebookPanel lang={lang} />;
     case "mistakeBook":
@@ -136,6 +141,8 @@ export function ToolsView({
   onDeleteCountdown,
   onSetMainCountdown,
   onReorderCountdowns,
+  timer,
+  timerActions,
 }: {
   lang: Lang;
   countdowns: Countdown[];
@@ -144,6 +151,8 @@ export function ToolsView({
   onDeleteCountdown: (id: string) => void;
   onSetMainCountdown: (id: string) => void;
   onReorderCountdowns: (countdowns: Countdown[]) => void;
+  timer: TimerState;
+  timerActions: TimerActions;
 }) {
   const [activeTool, setActiveTool] = useState<ToolId | null>(null);
   const active = tools.find((t) => t.id === activeTool);
@@ -246,6 +255,8 @@ export function ToolsView({
               onDeleteCountdown={onDeleteCountdown}
               onSetMainCountdown={onSetMainCountdown}
               onReorderCountdowns={onReorderCountdowns}
+              timer={timer}
+              timerActions={timerActions}
             />
           </Modal>
         )}

@@ -1,6 +1,6 @@
 export type CurriculumTrack = "bangla" | "english";
 export type ClassLevel = "9" | "10";
-export type ExamTarget = "ssc" | "half-yearly" | "test" | "other";
+export type ExamTarget = "ssc" | "half-yearly" | "test" | "general" | "other";
 export type StudyLevel = "beginner" | "intermediate" | "advanced";
 
 export type StudyPlan = {
@@ -67,6 +67,7 @@ export const examTargetOptions: { value: ExamTarget; label: { en: string; bn: st
   { value: "ssc", label: { en: "SSC Examination", bn: "এসএসসি পরীক্ষা" } },
   { value: "half-yearly", label: { en: "Half-Yearly Exam", bn: "অর্ধবার্ষিক পরীক্ষা" } },
   { value: "test", label: { en: "Class Test", bn: "ক্লাস টেস্ট" } },
+  { value: "general", label: { en: "General Study", bn: "সাধারণ পড়াশোনা" } },
   { value: "other", label: { en: "Something Else", bn: "অন্য কিছু" } },
 ];
 

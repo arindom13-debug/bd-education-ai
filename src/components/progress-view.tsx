@@ -36,6 +36,18 @@ import {
   type Subject,
 } from "@/lib/curriculum-data";
 import { daysUntil, type StudyPlan } from "@/lib/study-plan";
+import {
+  availableMinutesOn,
+  formatDuration,
+  minutesStudiedOn,
+  recommendForToday,
+  todayKey,
+  addDays,
+  weeklyMinutesByDay,
+  type ChapterCandidate,
+  type ScheduleState,
+} from "@/lib/study-schedule";
+import type { TimerContext } from "@/lib/study-timer";
 
 const upcomingExams = [
   { subject: { en: "Chemistry Test", bn: "রসায়ন পরীক্ষা" }, date: { en: "Aug 12", bn: "১২ আগস্ট" } },
@@ -43,17 +55,31 @@ const upcomingExams = [
   { subject: { en: "Half-yearly Exam", bn: "অর্ধবার্ষিক পরীক্ষা" }, date: { en: "Sep 1", bn: "১ সেপ্টেম্বর" } },
 ];
 
+// Sunday-first, matching weeklyMinutesByDay()'s indexing.
 const weekdayShort = [
-  { en: "Sat", bn: "শনি" },
   { en: "Sun", bn: "রবি" },
   { en: "Mon", bn: "সোম" },
   { en: "Tue", bn: "মঙ্গল" },
   { en: "Wed", bn: "বুধ" },
   { en: "Thu", bn: "বৃহঃ" },
   { en: "Fri", bn: "শুক্র" },
+  { en: "Sat", bn: "শনি" },
 ];
-const weeklyMinutes = [45, 60, 30, 90, 0, 75, 20];
-const streakDaysActive = [true, true, false, true, true, true, true];
+
+function reasonLabel(reason: ChapterCandidate["reason"], lang: Lang): string {
+  switch (reason) {
+    case "highPriority":
+      return strings.scheduleReasonHighPriority[lang];
+    case "practiceNeeded":
+      return strings.scheduleReasonPracticeNeeded[lang];
+    case "continueChapter":
+      return strings.scheduleReasonContinue[lang];
+    case "revision":
+      return strings.scheduleReasonRevision[lang];
+    default:
+      return strings.scheduleReasonGetStarted[lang];
+  }
+}
 
 function getGreeting(lang: Lang, name: string): string {
   const hour = new Date().getHours();
@@ -194,11 +220,17 @@ export function ProgressView({
   plan,
   onNavigate,
   subjects,
+  schedule,
+  sessionMinutes,
+  onStartSession,
 }: {
   lang: Lang;
   plan: StudyPlan;
   onNavigate: (view: CanvasView) => void;
   subjects: Subject[];
+  schedule: ScheduleState;
+  sessionMinutes: number;
+  onStartSession: (context: TimerContext, minutes: number) => void;
 }) {
   const [expandedSubjectId, setExpandedSubjectId] = useState<string | null>(null);
   const [isLoaded, setIsLoaded] = useState(false);
@@ -214,19 +246,22 @@ export function ProgressView({
       : Math.round(subjects.reduce((sum, s) => sum + getSubjectProgress(s), 0) / subjects.length);
   const remaining = daysUntil(plan.examDate);
   const weakSubjects = subjects.filter((s) => plan.weakSubjects.includes(s.id));
+  // Every figure below reads from real completed sessions rather than a
+  // parallel hardcoded array, so the hub can't disagree with the schedule.
+  const today = todayKey();
+  const weeklyMinutes = weeklyMinutesByDay(schedule.sessions, today);
   const maxMinutes = Math.max(...weeklyMinutes, 60);
   const weeklyMinutesTotal = weeklyMinutes.reduce((sum, m) => sum + m, 0);
-  const streakDays = streakDaysActive.filter(Boolean).length;
+  const streakDays = weeklyMinutes.filter((m) => m > 0).length;
+  const availableToday = availableMinutesOn(schedule.availability, schedule.sessions, today);
+  const todaysRecommendations = recommendForToday(subjects, plan, schedule, sessionMinutes, today);
   // The one thing the student is genuinely mid-way through, if anything —
   // "Pick Up Where You Left Off" only appears when this is real.
   const active = getActiveChapter(subjects);
   const activeRemainingMinutes = active ? getSubjectRemainingMinutes(active.subject) : 0;
 
   const greeting = getGreeting(lang, plan.name.trim());
-  const jsDay = new Date().getDay();
-  const todayIndex = jsDay === 6 ? 0 : jsDay + 1;
-  const yesterdayIndex = (todayIndex + 6) % 7;
-  const yesterdayMinutes = weeklyMinutes[yesterdayIndex];
+  const yesterdayMinutes = minutesStudiedOn(schedule.sessions, addDays(today, -1));
   const briefingRecommended = getNextRecommendedChapter(subjects);
   const recommendationSentence = briefingRecommended
     ? getRecommendationSentence(lang, briefingRecommended.chapter.name[lang], !!active)
@@ -387,6 +422,70 @@ export function ProgressView({
                       </div>
                     </div>
                   </div>
+                </Section>
+              )}
+
+              {/* Today's Study Plan — ranked from real syllabus progress, weak
+                  subjects, exam proximity, and this week's targets. */}
+              {todaysRecommendations.length > 0 && (
+                <Section index={2}>
+                  <Card>
+                    <CardTitle icon={CalendarDays}>{strings.scheduleTodaysPlanTitle[lang]}</CardTitle>
+                    <p className="text-sm text-foreground-muted">
+                      {strings.scheduleYouHave[lang]}{" "}
+                      <span className="font-medium text-foreground">{formatDuration(availableToday, lang)}</span>{" "}
+                      {strings.scheduleAvailableToday[lang]}.
+                    </p>
+                    <div className="mt-4 flex flex-col gap-2">
+                      {todaysRecommendations.map(({ candidate, minutes }, i) => (
+                        <div
+                          key={candidate.chapter.id}
+                          className="flex items-center gap-3 rounded-xl border border-border bg-surface-muted px-3 py-2.5"
+                        >
+                          <span className="w-4 shrink-0 text-xs tabular-nums text-foreground-faint">{i + 1}</span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium text-foreground-strong">
+                              {candidate.subject.name[lang]}
+                              <span className="font-normal text-foreground-muted">
+                                {" "}
+                                — {candidate.chapter.name[lang]}
+                              </span>
+                            </p>
+                            <p className="text-[11px] text-foreground-faint">
+                              {formatDuration(minutes, lang)} · {reasonLabel(candidate.reason, lang)}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() =>
+                              onStartSession(
+                                { subjectId: candidate.subject.id, chapterId: candidate.chapter.id },
+                                minutes
+                              )
+                            }
+                            className="shrink-0 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground-muted transition-colors duration-150 hover:text-foreground"
+                          >
+                            {strings.scheduleStartBtn[lang]}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.97 }}
+                      transition={{ duration: 0.15 }}
+                      onClick={() => {
+                        const first = todaysRecommendations[0];
+                        onStartSession(
+                          { subjectId: first.candidate.subject.id, chapterId: first.candidate.chapter.id },
+                          first.minutes
+                        );
+                      }}
+                      className="mt-4 flex items-center gap-1.5 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground"
+                    >
+                      {strings.scheduleStartTodaysPlanBtn[lang]}
+                      <ArrowRight size={14} strokeWidth={2} />
+                    </motion.button>
+                  </Card>
                 </Section>
               )}
 

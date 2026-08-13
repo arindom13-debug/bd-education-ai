@@ -51,7 +51,7 @@ export function MainCountdownStrip({
     <button
       onClick={onOpenDetails}
       disabled={!onOpenDetails}
-      className="mx-3 mt-3 block rounded-lg border border-border bg-surface px-3 py-2.5 text-left transition-colors duration-150 enabled:hover:bg-surface-muted"
+      className="mx-3 mt-2 block rounded-lg border border-border bg-surface px-2.5 py-2 text-left transition-colors duration-150 enabled:hover:bg-surface-muted"
     >
       <p className="truncate text-xs font-medium text-foreground">{countdown.name}</p>
       <p className="mt-0.5 truncate text-[11px] tabular-nums text-foreground-muted">

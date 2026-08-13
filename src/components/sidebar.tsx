@@ -12,6 +12,8 @@ import {
   ChevronsUpDown,
   GraduationCap,
   Zap,
+  CalendarClock,
+  Timer as TimerIcon,
   type LucideIcon,
 } from "lucide-react";
 import { strings, type Lang } from "@/lib/i18n";
@@ -19,11 +21,23 @@ import { chatHistory } from "@/lib/chat-data";
 import { ProfilePanel } from "@/components/profile-panel";
 import { Tooltip } from "@/components/tooltip";
 import { MainCountdownStrip } from "@/components/main-countdown-strip";
+import { useTimerNow } from "@/components/study-timer-controls";
+import { formatClock, getRemainingMs, type TimerState } from "@/lib/study-timer";
+import { findChapter, findSubject } from "@/lib/study-schedule";
+import type { Subject } from "@/lib/curriculum-data";
 import type { StudyPlan } from "@/lib/study-plan";
 import type { ChatLanguage } from "@/lib/chat-language";
 import type { Countdown } from "@/lib/countdowns";
 
-export type CanvasView = "chat" | "progress" | "study" | "setup" | "tools" | "examMode" | "panicRevision";
+export type CanvasView =
+  | "chat"
+  | "progress"
+  | "study"
+  | "schedule"
+  | "setup"
+  | "tools"
+  | "examMode"
+  | "panicRevision";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -44,17 +58,19 @@ function NavButton({
   label,
   onClick,
   layoutGroup,
+  trailing,
 }: {
   active: boolean;
   icon: LucideIcon;
   label: string;
   onClick: () => void;
   layoutGroup: string;
+  trailing?: React.ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
-      className={`relative flex items-center gap-2.5 rounded-md px-3 py-2.5 text-left text-sm transition-colors duration-150 ${
+      className={`relative flex items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm transition-colors duration-150 ${
         active ? "font-medium text-foreground-strong" : "text-foreground-muted hover:bg-surface-muted hover:text-foreground"
       }`}
     >
@@ -62,11 +78,54 @@ function NavButton({
         <motion.span
           layoutId={`sidebar-active-indicator-${layoutGroup}`}
           transition={{ duration: 0.25, ease: EASE }}
-          className="absolute inset-0 -z-10 rounded-md bg-accent-soft"
+          className="absolute inset-0 -z-10 rounded-md border border-border bg-accent-soft"
         />
       )}
       <Icon size={16} strokeWidth={1.75} />
       <span className="flex-1 truncate">{label}</span>
+      {trailing}
+    </button>
+  );
+}
+
+/** Live study-session strip: the clock plus what's actually being studied, so
+ * the sidebar answers "what am I meant to be doing" at a glance. Clicking it
+ * jumps to the schedule, where the full session controls live. */
+function ActiveSessionStrip({
+  lang,
+  timer,
+  subjects,
+  onOpen,
+}: {
+  lang: Lang;
+  timer: TimerState;
+  subjects: Subject[];
+  onOpen: () => void;
+}) {
+  const now = useTimerNow(timer.status);
+  if (timer.status !== "running" && timer.status !== "paused") return null;
+
+  const subject = timer.context ? findSubject(subjects, timer.context.subjectId) : null;
+  const chapter = timer.context ? findChapter(subjects, timer.context.subjectId, timer.context.chapterId) : null;
+
+  return (
+    <button
+      onClick={onOpen}
+      className="mx-3 mb-2 flex w-[calc(100%-1.5rem)] flex-col items-start gap-0.5 rounded-lg border border-border bg-surface px-2.5 py-2 text-left transition-colors duration-150 hover:bg-surface-muted"
+    >
+      <span className="flex items-center gap-1.5 text-xs tabular-nums text-foreground">
+        <TimerIcon size={12} strokeWidth={1.75} className="text-foreground-muted" />
+        {formatClock(getRemainingMs(timer, now))}
+        {timer.status === "paused" && (
+          <span className="text-[10px] text-foreground-faint">{strings.timerPausedLabel[lang]}</span>
+        )}
+      </span>
+      {subject && (
+        <span className="w-full truncate text-[11px] text-foreground-muted">
+          {subject.name[lang]}
+          {chapter && ` · ${chapter.name[lang]}`}
+        </span>
+      )}
     </button>
   );
 }
@@ -87,6 +146,8 @@ export function Sidebar({
   chatLanguage,
   onChangeChatLanguage,
   mainCountdown,
+  timer,
+  subjects,
 }: {
   lang: Lang;
   onToggleLang: () => void;
@@ -95,6 +156,8 @@ export function Sidebar({
   onSelectView: (view: CanvasView) => void;
   onSelectChat: (id: string) => void;
   onNewChat: () => void;
+  timer: TimerState;
+  subjects: Subject[];
   onCollapse?: () => void;
   hideHeader?: boolean;
   studentName: string;
@@ -129,7 +192,7 @@ export function Sidebar({
       {/* Fixed top area — never scrolls */}
       <div className="shrink-0">
         {!hideHeader && (
-          <div className="flex items-center justify-between border-b border-border px-4 py-4">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
             <div className="flex items-center gap-2">
               <BrandMark />
               <span className="text-[15px] font-semibold tracking-tight">{strings.appName[lang]}</span>
@@ -163,10 +226,10 @@ export function Sidebar({
           onOpenDetails={() => onSelectView("tools")}
         />
 
-        <div className="flex flex-col gap-1 px-3 pb-2 pt-3">
+        <div className="flex flex-col gap-1 px-3 pb-1.5 pt-2">
           <button
             onClick={onNewChat}
-            className="flex items-center gap-2.5 rounded-md border border-border px-3 py-2.5 text-left text-sm font-medium transition-colors duration-150 hover:bg-surface-muted active:scale-[0.99]"
+            className="flex items-center gap-2 rounded-md border border-border px-2.5 py-2.5 text-left text-sm transition-colors duration-150 hover:bg-surface-muted active:scale-[0.99]"
           >
             <Plus size={16} strokeWidth={1.75} />
             {strings.newChat[lang]}
@@ -186,6 +249,13 @@ export function Sidebar({
             layoutGroup={layoutGroup}
           />
           <NavButton
+            active={view === "schedule"}
+            icon={CalendarClock}
+            label={strings.scheduleNav[lang]}
+            onClick={() => onSelectView("schedule")}
+            layoutGroup={layoutGroup}
+          />
+          <NavButton
             active={view === "tools"}
             icon={Wrench}
             label={strings.toolsNav[lang]}
@@ -201,10 +271,10 @@ export function Sidebar({
           />
         </div>
 
-        <div className="flex gap-2 px-3 pb-2">
+        <div className="flex gap-1.5 px-3 pb-2">
           <button
             onClick={() => onSelectView("examMode")}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-2 text-xs font-medium transition-colors active:scale-95 ${
+            className={`flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors active:scale-95 ${
               view === "examMode"
                 ? "border-accent bg-accent text-accent-foreground"
                 : "border-accent/30 bg-accent-soft text-accent"
@@ -215,7 +285,7 @@ export function Sidebar({
           </button>
           <button
             onClick={() => onSelectView("panicRevision")}
-            className={`flex flex-1 items-center justify-center gap-1.5 rounded-md border px-2 py-2 text-xs font-medium transition-colors active:scale-95 ${
+            className={`flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1.5 text-xs font-medium transition-colors active:scale-95 ${
               view === "panicRevision"
                 ? "border-accent bg-accent text-accent-foreground"
                 : "border-accent/30 bg-accent-soft text-accent"
@@ -225,6 +295,13 @@ export function Sidebar({
             {strings.panicBtn[lang]}
           </button>
         </div>
+
+        <ActiveSessionStrip
+          lang={lang}
+          timer={timer}
+          subjects={subjects}
+          onOpen={() => onSelectView("schedule")}
+        />
       </div>
 
       {/* Only this area scrolls */}
@@ -233,7 +310,7 @@ export function Sidebar({
           const threads = chatHistory.filter((t) => t.group === group.key);
           if (threads.length === 0) return null;
           return (
-            <div key={group.key} className="mb-3">
+            <div key={group.key} className="mb-2">
               <p className="px-2.5 pb-1 text-xs font-medium uppercase tracking-wide text-foreground-muted">
                 {group.label}
               </p>
