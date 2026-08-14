@@ -13,13 +13,28 @@ import { ToolsView } from "@/components/tools-view";
 import { ExamModeView } from "@/components/exam-mode-view";
 import { PanicRevisionView } from "@/components/panic-revision-view";
 import { StudySessionView } from "@/components/study-session-view";
+import { ProfileView } from "@/components/profile-view";
+import { SettingsView } from "@/components/settings-view";
+import { UsageView } from "@/components/usage-view";
+import { BillingView } from "@/components/billing-view";
+import { HelpSupportView } from "@/components/help-support-view";
+import { WhatsNewView } from "@/components/whats-new-view";
 import { Tooltip } from "@/components/tooltip";
 import { strings, type Lang } from "@/lib/i18n";
 import { chatHistory, onboardingThread } from "@/lib/chat-data";
 import { loadStudyPlan, saveStudyPlan, classLevelOptions, type StudyPlan } from "@/lib/study-plan";
 import { subjects as initialSubjects, type Subject, type Chapter, type ChapterStatus } from "@/lib/curriculum-data";
 import { loadChatLanguage, saveChatLanguage, type ChatLanguage } from "@/lib/chat-language";
-import { loadTheme, saveTheme, applyTheme, type Theme } from "@/lib/theme";
+import {
+  loadTheme,
+  saveTheme,
+  applyTheme,
+  loadThemePreference,
+  saveThemePreference,
+  resolveTheme,
+  type Theme,
+  type ThemePreference,
+} from "@/lib/theme";
 import { defaultCountdowns, getMainCountdown, type Countdown } from "@/lib/countdowns";
 import { MainCountdownStrip } from "@/components/main-countdown-strip";
 import { StudyTimerPill } from "@/components/study-timer-pill";
@@ -227,12 +242,34 @@ export function AppShell() {
   // Init script in layout.tsx already applied this to the DOM before paint —
   // loadTheme() here just brings React's state in sync with it.
   const [theme, setThemeState] = useState<Theme>(() => loadTheme());
-  const toggleTheme = () => {
-    const next: Theme = theme === "dark" ? "light" : "dark";
-    setThemeState(next);
-    saveTheme(next);
-    applyTheme(next);
+  const [themePreference, setThemePreferenceState] = useState<ThemePreference>(() => loadThemePreference());
+
+  // "system" needs live re-resolution — dark/light are just applied once.
+  useEffect(() => {
+    if (themePreference !== "system") return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const sync = () => {
+      const next = resolveTheme("system");
+      setThemeState(next);
+      saveTheme(next);
+      applyTheme(next);
+    };
+    sync();
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, [themePreference]);
+
+  const setThemePreference = (preference: ThemePreference) => {
+    setThemePreferenceState(preference);
+    saveThemePreference(preference);
+    if (preference === "system") return; // the effect above resolves + applies it
+    setThemeState(preference);
+    saveTheme(preference);
+    applyTheme(preference);
   };
+  // Sidebar's quick toggle only ever flips between dark/light — using it
+  // pins an explicit choice, stepping out of "system" if that was active.
+  const toggleTheme = () => setThemePreference(theme === "dark" ? "light" : "dark");
 
   const [chatLanguage, setChatLanguageState] = useState<ChatLanguage>(() => loadChatLanguage());
   const setChatLanguage = (value: ChatLanguage) => {
@@ -511,8 +548,6 @@ export function AppShell() {
           studentName={studentName}
           studentClassLabel={studentClassLabel}
           plan={plan}
-          chatLanguage={chatLanguage}
-          onChangeChatLanguage={setChatLanguage}
           mainCountdown={mainCountdown}
           timer={timerState}
           subjects={subjects}
@@ -695,6 +730,29 @@ export function AppShell() {
             {view === "panicRevision" && (
               <PanicRevisionView lang={lang} plan={plan} subjects={subjects} onNavigate={selectView} />
             )}
+            {view === "profile" && (
+              <ProfileView
+                lang={lang}
+                studentName={studentName}
+                studentClassLabel={studentClassLabel}
+                plan={plan}
+                onNavigate={selectView}
+              />
+            )}
+            {view === "settings" && (
+              <SettingsView
+                lang={lang}
+                onSetLang={setLang}
+                themePreference={themePreference}
+                onSetThemePreference={setThemePreference}
+                chatLanguage={chatLanguage}
+                onChangeChatLanguage={setChatLanguage}
+              />
+            )}
+            {view === "usage" && <UsageView lang={lang} onNavigate={selectView} />}
+            {view === "billing" && <BillingView lang={lang} />}
+            {view === "help" && <HelpSupportView lang={lang} />}
+            {view === "whatsNew" && <WhatsNewView lang={lang} />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -724,8 +782,6 @@ export function AppShell() {
             studentName={studentName}
             studentClassLabel={studentClassLabel}
             plan={plan}
-            chatLanguage={chatLanguage}
-            onChangeChatLanguage={setChatLanguage}
             mainCountdown={mainCountdown}
             timer={timerState}
             subjects={subjects}

@@ -1,4 +1,4 @@
-export type ChatLanguage = "bn" | "en" | "banglish";
+export type ChatLanguage = "bn" | "en";
 
 const STORAGE_KEY = "ai-chat-language";
 
@@ -8,7 +8,7 @@ export function loadChatLanguage(): ChatLanguage {
   if (typeof window === "undefined") return "bn";
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw === "bn" || raw === "en" || raw === "banglish") return raw;
+    if (raw === "bn" || raw === "en") return raw;
   } catch {
     // storage unavailable — fall back to the default below
   }
@@ -27,9 +27,6 @@ export function saveChatLanguage(value: ChatLanguage) {
 export function getDemoReplyText(chatLanguage: ChatLanguage): string {
   if (chatLanguage === "bn") {
     return "এটি একটি ডেমো উত্তর। তোমার পাঠ্যবইয়ের ভিত্তিতে প্রকৃত উত্তর পরবর্তী ধাপে আসবে।";
-  }
-  if (chatLanguage === "banglish") {
-    return "Eta ekta demo reply. Tomar textbook onujayi asol uttor porborti dhape asbe.";
   }
   return "This is a demo reply. Real answers grounded in your textbooks are coming in a later step.";
 }

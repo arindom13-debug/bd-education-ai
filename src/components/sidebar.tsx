@@ -28,7 +28,6 @@ import { formatClock, getRemainingMs, type TimerState } from "@/lib/study-timer"
 import { findChapter, findSubject } from "@/lib/study-schedule";
 import type { Subject } from "@/lib/curriculum-data";
 import type { StudyPlan } from "@/lib/study-plan";
-import type { ChatLanguage } from "@/lib/chat-language";
 import type { Countdown } from "@/lib/countdowns";
 import type { Theme } from "@/lib/theme";
 
@@ -40,7 +39,13 @@ export type CanvasView =
   | "setup"
   | "tools"
   | "examMode"
-  | "panicRevision";
+  | "panicRevision"
+  | "profile"
+  | "settings"
+  | "usage"
+  | "billing"
+  | "help"
+  | "whatsNew";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -148,8 +153,6 @@ export function Sidebar({
   studentName,
   studentClassLabel,
   plan,
-  chatLanguage,
-  onChangeChatLanguage,
   mainCountdown,
   timer,
   subjects,
@@ -170,8 +173,6 @@ export function Sidebar({
   studentName: string;
   studentClassLabel: string;
   plan: StudyPlan;
-  chatLanguage: ChatLanguage;
-  onChangeChatLanguage: (value: ChatLanguage) => void;
   mainCountdown: Countdown | null;
 }) {
   const groups: { key: "today" | "yesterday"; label: string }[] = [
@@ -362,9 +363,7 @@ export function Sidebar({
                 studentName={studentName}
                 studentClassLabel={studentClassLabel}
                 plan={plan}
-                chatLanguage={chatLanguage}
-                onChangeChatLanguage={onChangeChatLanguage}
-                onOpenSettings={() => onSelectView("setup")}
+                onNavigate={onSelectView}
                 onClose={() => setMenuOpen(false)}
               />
             )}

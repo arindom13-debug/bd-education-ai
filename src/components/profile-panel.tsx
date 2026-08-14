@@ -1,17 +1,24 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { Target, CalendarClock, Flame, Clock, Languages, Settings, LogOut } from "lucide-react";
+import {
+  Target,
+  CalendarClock,
+  Flame,
+  Clock,
+  User,
+  Settings,
+  BarChart3,
+  CreditCard,
+  HelpCircle,
+  Sparkles,
+  LogOut,
+  type LucideIcon,
+} from "lucide-react";
 import { strings, type Lang } from "@/lib/i18n";
 import { streakDays } from "@/lib/curriculum-data";
 import { daysUntil, examTargetOptions, curriculumTrackOptions, type StudyPlan } from "@/lib/study-plan";
-import type { ChatLanguage } from "@/lib/chat-language";
-
-const CHAT_LANGUAGE_OPTIONS: { value: ChatLanguage; label: string }[] = [
-  { value: "bn", label: "বাংলা" },
-  { value: "en", label: "English" },
-  { value: "banglish", label: "Banglish" },
-];
+import type { CanvasView } from "@/components/sidebar";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -46,18 +53,14 @@ export function ProfilePanel({
   studentName,
   studentClassLabel,
   plan,
-  chatLanguage,
-  onChangeChatLanguage,
-  onOpenSettings,
+  onNavigate,
   onClose,
 }: {
   lang: Lang;
   studentName: string;
   studentClassLabel: string;
   plan: StudyPlan;
-  chatLanguage: ChatLanguage;
-  onChangeChatLanguage: (value: ChatLanguage) => void;
-  onOpenSettings: () => void;
+  onNavigate: (view: CanvasView) => void;
   onClose: () => void;
 }) {
   const boardLabel = curriculumTrackOptions.find((o) => o.value === plan.curriculumTrack)?.label[lang] ?? "";
@@ -68,13 +71,22 @@ export function ProfilePanel({
     .join(" · ");
   const weeklyMinutes = plan.dailyMinutes * 7;
 
+  const menuItems: { view: CanvasView; icon: LucideIcon; label: string }[] = [
+    { view: "profile", icon: User, label: strings.accountMenuProfile[lang] },
+    { view: "settings", icon: Settings, label: strings.accountMenuSettings[lang] },
+    { view: "usage", icon: BarChart3, label: strings.accountMenuUsage[lang] },
+    { view: "billing", icon: CreditCard, label: strings.accountMenuBilling[lang] },
+    { view: "help", icon: HelpCircle, label: strings.accountMenuHelp[lang] },
+    { view: "whatsNew", icon: Sparkles, label: strings.accountMenuWhatsNew[lang] },
+  ];
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 10, scale: 0.97 }}
       animate={{ opacity: 1, y: 0, scale: 1 }}
       exit={{ opacity: 0, y: 10, scale: 0.97 }}
       transition={{ duration: 0.2, ease: EASE }}
-      className="absolute bottom-full left-3 right-3 z-30 mb-3 origin-bottom overflow-hidden rounded-2xl border border-border bg-surface shadow-2xl"
+      className="absolute bottom-full left-3 right-3 z-30 mb-3 max-h-[70dvh] origin-bottom overflow-y-auto overflow-x-hidden rounded-2xl border border-border bg-surface shadow-2xl"
     >
       <div className="p-4">
         <div className="flex items-center gap-3">
@@ -111,45 +123,26 @@ export function ProfilePanel({
         </div>
       </div>
 
-      <div className="flex flex-col gap-1.5 border-t border-border p-2.5">
-        <span className="flex items-center gap-2.5 px-1 text-sm text-foreground-muted">
-          <Languages size={15} strokeWidth={1.75} />
-          {strings.languageLabel[lang]}
-        </span>
-        <div className="grid grid-cols-3 gap-1 rounded-lg border border-border p-1">
-          {CHAT_LANGUAGE_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => onChangeChatLanguage(opt.value)}
-              className={`rounded-md px-2 py-1.5 text-xs font-medium transition-colors duration-150 ${
-                chatLanguage === opt.value
-                  ? "bg-accent-soft text-accent"
-                  : "text-foreground-muted hover:text-foreground"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
       <div className="flex flex-col gap-0.5 border-t border-border p-1.5">
-        <button
-          onClick={() => {
-            onOpenSettings();
-            onClose();
-          }}
-          className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm hover:bg-surface-muted"
-        >
-          <Settings size={15} strokeWidth={1.75} />
-          {strings.accountSettingsItem[lang]}
-        </button>
+        {menuItems.map((item) => (
+          <button
+            key={item.view}
+            onClick={() => {
+              onNavigate(item.view);
+              onClose();
+            }}
+            className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm hover:bg-surface-muted"
+          >
+            <item.icon size={15} strokeWidth={1.75} />
+            {item.label}
+          </button>
+        ))}
         <button
           onClick={onClose}
           className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-warning hover:bg-warning/10"
         >
           <LogOut size={15} strokeWidth={1.75} />
-          {strings.signOut[lang]}
+          {strings.accountMenuLogout[lang]}
         </button>
       </div>
     </motion.div>
