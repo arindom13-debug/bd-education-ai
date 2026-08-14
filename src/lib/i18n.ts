@@ -452,6 +452,8 @@ export const strings = {
   accountSettingsItem: { en: "Account Settings", bn: "অ্যাকাউন্ট সেটিংস" },
   collapseSidebarLabel: { en: "Collapse sidebar", bn: "সাইডবার সংকুচিত করো" },
   expandSidebarLabel: { en: "Expand sidebar", bn: "সাইডবার প্রসারিত করো" },
+  switchToLightModeLabel: { en: "Switch to light mode", bn: "লাইট মোডে যাও" },
+  switchToDarkModeLabel: { en: "Switch to dark mode", bn: "ডার্ক মোডে যাও" },
   achievementUnlockedLabel: { en: "Achievement Unlocked", bn: "অর্জন আনলক হয়েছে" },
   reviewBtn: { en: "Review", bn: "পর্যালোচনা" },
   cancelBtn: { en: "Cancel", bn: "বাতিল" },

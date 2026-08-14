@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUp } from "lucide-react";
 import { strings, type Lang } from "@/lib/i18n";
 import { subjects as allSubjects, type Subject } from "@/lib/curriculum-data";
@@ -11,6 +11,8 @@ import type { ChatMessage, ChatThread } from "@/lib/chat-data";
 import { TypingDots } from "@/components/typing-dots";
 import { RecentChatsSection } from "@/components/recent-chats-section";
 import { SubjectWorkspace } from "@/components/subject-workspace";
+
+const EASE = [0.16, 1, 0.3, 1] as const;
 
 function Bubble({ message, lang }: { message: ChatMessage; lang: Lang }) {
   const isUser = message.role === "user";
@@ -85,7 +87,11 @@ export function ChatView({
   };
 
   const composer = (
-    <div className="mx-auto flex w-full max-w-2xl items-end gap-2 rounded-2xl border border-border bg-surface p-2.5 shadow-md transition-colors duration-150 focus-within:border-foreground-faint">
+    <motion.div
+      layoutId="chat-composer"
+      transition={{ duration: 0.4, ease: EASE }}
+      className="mx-auto flex w-full max-w-2xl items-end gap-2 rounded-2xl border border-border bg-surface p-2.5 shadow-md transition-colors duration-150 focus-within:border-foreground-faint"
+    >
       <textarea
         value={input}
         onChange={(e) => setInput(e.target.value)}
@@ -107,101 +113,112 @@ export function ChatView({
       >
         <ArrowUp size={18} strokeWidth={2} />
       </button>
-    </div>
+    </motion.div>
   );
 
-  if (messages.length === 0) {
-    return (
-      <div className="flex min-h-dvh flex-col items-center justify-center gap-8 p-6">
-        <div className="flex flex-col items-center gap-4 text-center">
-          <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-foreground-muted">
-            {strings.academicAssistantLabel[lang]}
-            {classLabel && <span aria-hidden>·</span>}
-            {classLabel}
-            <span aria-hidden>·</span>
-            {strings.bangladeshCurriculumLabel[lang]}
-          </p>
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground-strong sm:text-3xl">
-              {strings.chatGreeting[lang]}
-            </h1>
-            <p className="mx-auto mt-2 max-w-md text-sm text-foreground-muted">
-              {strings.chatSubtitle[lang]}
-            </p>
-          </div>
-        </div>
-        {composer}
-        <div className="flex w-full max-w-2xl flex-col items-center">
-          <div className="flex flex-wrap justify-center gap-2">
-            {allSubjects.slice(0, 5).map((s) => {
-              const isSelected = selectedSubjectId === s.id;
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => setSelectedSubjectId((id) => (id === s.id ? null : s.id))}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
-                    isSelected
-                      ? "border-accent bg-accent-soft text-accent"
-                      : "border-border text-foreground-muted hover:border-accent hover:text-foreground"
-                  }`}
-                >
-                  {s.name[lang]}
-                </button>
-              );
-            })}
-          </div>
-          <AnimatePresence>
-            {selectedSubject && (
-              <SubjectWorkspace
-                key={selectedSubject.id}
-                lang={lang}
-                subject={selectedSubject}
-                onAskAi={() =>
-                  setInput(
-                    `${lang === "en" ? "Ask about" : "সম্পর্কে জিজ্ঞাসা করো"} ${selectedSubject.name[lang]}`
-                  )
-                }
-                onPractice={() =>
-                  setInput(
-                    lang === "en"
-                      ? `Give me practice questions on ${selectedSubject.name.en}`
-                      : `${selectedSubject.name.bn} বিষয়ে অনুশীলন প্রশ্ন দাও`
-                  )
-                }
-                onRevise={() =>
-                  setInput(
-                    lang === "en"
-                      ? `Help me revise ${selectedSubject.name.en}`
-                      : `${selectedSubject.name.bn} রিভিশন করতে সাহায্য করো`
-                  )
-                }
-              />
-            )}
-          </AnimatePresence>
-        </div>
-        <RecentChatsSection lang={lang} onOpenChat={onOpenChat} />
-      </div>
-    );
-  }
-
   return (
-    <div className="flex flex-col">
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-4 sm:p-6">
-        {messages.map((m, i) => (
-          <Bubble key={i} message={m} lang={lang} />
-        ))}
-        {isTyping && (
-          <div className="flex justify-start">
-            <div className="rounded-2xl border border-border bg-surface px-4 py-2.5">
-              <TypingDots />
+    <div className="relative">
+      <AnimatePresence mode="popLayout" initial={false}>
+        {messages.length === 0 ? (
+          <motion.div
+            key="landing"
+            exit={{ opacity: 0, transition: { duration: 0.2, ease: EASE } }}
+            className="flex min-h-dvh flex-col items-center justify-center gap-8 p-6"
+          >
+            <div className="flex flex-col items-center gap-4 text-center">
+              <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-foreground-muted">
+                {strings.academicAssistantLabel[lang]}
+                {classLabel && <span aria-hidden>·</span>}
+                {classLabel}
+                <span aria-hidden>·</span>
+                {strings.bangladeshCurriculumLabel[lang]}
+              </p>
+              <div>
+                <h1 className="text-2xl font-semibold tracking-tight text-foreground-strong sm:text-3xl">
+                  {strings.chatGreeting[lang]}
+                </h1>
+                <p className="mx-auto mt-2 max-w-md text-sm text-foreground-muted">
+                  {strings.chatSubtitle[lang]}
+                </p>
+              </div>
             </div>
-          </div>
+            {composer}
+            <div className="flex w-full max-w-2xl flex-col items-center">
+              <div className="flex flex-wrap justify-center gap-2">
+                {allSubjects.slice(0, 5).map((s) => {
+                  const isSelected = selectedSubjectId === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => setSelectedSubjectId((id) => (id === s.id ? null : s.id))}
+                      className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
+                        isSelected
+                          ? "border-accent bg-accent-soft text-accent"
+                          : "border-border text-foreground-muted hover:border-accent hover:text-foreground"
+                      }`}
+                    >
+                      {s.name[lang]}
+                    </button>
+                  );
+                })}
+              </div>
+              <AnimatePresence>
+                {selectedSubject && (
+                  <SubjectWorkspace
+                    key={selectedSubject.id}
+                    lang={lang}
+                    subject={selectedSubject}
+                    onAskAi={() =>
+                      setInput(
+                        `${lang === "en" ? "Ask about" : "সম্পর্কে জিজ্ঞাসা করো"} ${selectedSubject.name[lang]}`
+                      )
+                    }
+                    onPractice={() =>
+                      setInput(
+                        lang === "en"
+                          ? `Give me practice questions on ${selectedSubject.name.en}`
+                          : `${selectedSubject.name.bn} বিষয়ে অনুশীলন প্রশ্ন দাও`
+                      )
+                    }
+                    onRevise={() =>
+                      setInput(
+                        lang === "en"
+                          ? `Help me revise ${selectedSubject.name.en}`
+                          : `${selectedSubject.name.bn} রিভিশন করতে সাহায্য করো`
+                      )
+                    }
+                  />
+                )}
+              </AnimatePresence>
+            </div>
+            <RecentChatsSection lang={lang} onOpenChat={onOpenChat} />
+          </motion.div>
+        ) : (
+          <motion.div key="active" className="flex flex-col">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.32, ease: EASE, delay: 0.05 }}
+              className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-4 sm:p-6"
+            >
+              {messages.map((m, i) => (
+                <Bubble key={i} message={m} lang={lang} />
+              ))}
+              {isTyping && (
+                <div className="flex justify-start">
+                  <div className="rounded-2xl border border-border bg-surface px-4 py-2.5">
+                    <TypingDots />
+                  </div>
+                </div>
+              )}
+              <div ref={bottomRef} />
+            </motion.div>
+            <div className="sticky bottom-16 border-t border-border bg-background p-3 sm:p-4 md:bottom-0">
+              {composer}
+            </div>
+          </motion.div>
         )}
-        <div ref={bottomRef} />
-      </div>
-      <div className="sticky bottom-16 border-t border-border bg-background p-3 sm:p-4 md:bottom-0">
-        {composer}
-      </div>
+      </AnimatePresence>
     </div>
   );
 }

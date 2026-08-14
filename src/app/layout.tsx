@@ -18,9 +18,17 @@ export const metadata: Metadata = {
     "The AI study companion for Bangladeshi Class 9-10 students, grounded in your actual textbooks.",
 };
 
+// Applies the saved theme before first paint so there's no flash of the
+// wrong theme on load. Storage key must match STORAGE_KEY in lib/theme.ts —
+// this runs before any bundle loads, so it can't import that constant.
+const themeInitScript = `(function(){try{if(localStorage.getItem("arindoms-ai-theme")==="light"){document.documentElement.setAttribute("data-theme","light");}}catch(e){}})();`;
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${inter.variable} ${notoSansBengali.variable} h-full antialiased`}>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+      </head>
       <body className="min-h-full">{children}</body>
     </html>
   );

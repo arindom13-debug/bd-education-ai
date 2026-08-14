@@ -1,10 +1,12 @@
 @import "tailwindcss";
 
 :root {
-  /* Premium monochrome dark system — the product's only theme. Depth comes
+  /* Premium monochrome dark system — the product's default theme. Depth comes
      from this background→sidebar→surface→muted→control→border ladder, not
      from color; --accent stays grayscale on purpose, leaving color reserved
-     for success/warning/danger. */
+     for success/warning/danger. This block is the fallback whenever no
+     [data-theme] is set, so it must stay exactly as-is. */
+  color-scheme: dark;
   --background: #080808;
   --sidebar: #0f0f0f;
   --surface: #151515;
@@ -26,6 +28,53 @@
   --highlight: #1c1c1c;
   --scrollbar-thumb: #3a3a3a;
   --scrollbar-thumb-hover: #555555;
+}
+
+/* Premium monochrome LIGHT system — a layered grayscale ladder, not one flat
+   white: off-white page → white cards (cards read as "elevated" precisely
+   because they're brighter than the page around them) → subtle-gray
+   secondary surfaces/sidebar → gray buttons. Text/icons are always black —
+   never a gray hue — with hierarchy expressed as reduced opacity on that
+   same black, not a different color. --accent is a mid-gray button fill
+   with black text, never black-on-white or a hue. Color stays reserved for
+   success/warning/danger. Pure override of the block above — nothing here
+   is read unless [data-theme="light"] is set. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --background: #fafafa;
+  --sidebar: #f2f2f2;
+  --surface: #ffffff;
+  --surface-muted: #eeeeee;
+  --control: #ffffff;
+  --border: #e0e0e0;
+  --foreground: #000000;
+  --foreground-strong: #000000;
+  --foreground-muted: rgba(0, 0, 0, 0.6);
+  --foreground-faint: rgba(0, 0, 0, 0.4);
+  --accent: #8c8c8c;
+  --accent-hover: #757575;
+  --accent-foreground: #000000;
+  --accent-soft: #ececec;
+  --success: #1e7d52;
+  --progress-track: #ececec;
+  --warning: #a5691c;
+  --danger: #c0433a;
+  --highlight: #eeeeee;
+  --scrollbar-thumb: #d6d6d6;
+  --scrollbar-thumb-hover: #bcbcbc;
+}
+
+/* Very subtle elevation for cards/inputs in light mode — @layer base keeps
+   this beneath every Tailwind utility, so any component that already sets
+   its own shadow (Modal's shadow-lg, the composer's shadow-md, etc.) keeps
+   that exact shadow untouched; this only fills in where none is set. Dark
+   mode never had shadows and isn't touched — this block is unreachable
+   without [data-theme="light"]. */
+@layer base {
+  :root[data-theme="light"] .bg-surface,
+  :root[data-theme="light"] .bg-control {
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  }
 }
 
 @theme inline {
@@ -57,10 +106,14 @@ body {
   font-family: var(--font-sans);
 }
 
-/* Native date-picker controls otherwise render with light-scheme (often
-   illegible) text/icons on our dark surfaces. */
+/* Native date-picker controls otherwise render with the wrong-scheme (often
+   illegible) text/icons against our surfaces — follow the active theme. */
 input[type="date"] {
   color-scheme: dark;
+}
+
+:root[data-theme="light"] input[type="date"] {
+  color-scheme: light;
 }
 
 /* Custom scrollbar — thin, transparent track, dark-gray thumb. Applied

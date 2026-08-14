@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
-import { Menu, PanelLeftOpen } from "lucide-react";
+import { Menu, PanelLeftOpen, Sun, Moon } from "lucide-react";
 import { Sidebar, BrandMark, type CanvasView } from "@/components/sidebar";
 import { BottomNav } from "@/components/bottom-nav";
 import { ChatView } from "@/components/chat-view";
@@ -19,6 +19,7 @@ import { chatHistory, onboardingThread } from "@/lib/chat-data";
 import { loadStudyPlan, saveStudyPlan, classLevelOptions, type StudyPlan } from "@/lib/study-plan";
 import { subjects as initialSubjects, type Subject, type Chapter, type ChapterStatus } from "@/lib/curriculum-data";
 import { loadChatLanguage, saveChatLanguage, type ChatLanguage } from "@/lib/chat-language";
+import { loadTheme, saveTheme, applyTheme, type Theme } from "@/lib/theme";
 import { defaultCountdowns, getMainCountdown, type Countdown } from "@/lib/countdowns";
 import { MainCountdownStrip } from "@/components/main-countdown-strip";
 import { StudyTimerPill } from "@/components/study-timer-pill";
@@ -87,6 +88,10 @@ export function AppShell() {
   const [view, setView] = useState<CanvasView>("chat");
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // Gates the New Chat fade/slide transition: newChat() sets it true so that
+  // one chat-panel swap animates, selectChat() clears it so every other
+  // chat switch (picking a past conversation) stays instant, unchanged.
+  const [newChatTransition, setNewChatTransition] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsedState] = useState(() => loadSidebarCollapsed());
   const setSidebarCollapsed = (collapsed: boolean) => {
     setSidebarCollapsedState(collapsed);
@@ -218,6 +223,16 @@ export function AppShell() {
   const updateWeeklyTargets = (weeklyTargets: Record<string, number>) =>
     commitSchedule({ ...scheduleState, weeklyTargets });
   const updateAvailability = (availability: TimeSlot[][]) => commitSchedule({ ...scheduleState, availability });
+
+  // Init script in layout.tsx already applied this to the DOM before paint —
+  // loadTheme() here just brings React's state in sync with it.
+  const [theme, setThemeState] = useState<Theme>(() => loadTheme());
+  const toggleTheme = () => {
+    const next: Theme = theme === "dark" ? "light" : "dark";
+    setThemeState(next);
+    saveTheme(next);
+    applyTheme(next);
+  };
 
   const [chatLanguage, setChatLanguageState] = useState<ChatLanguage>(() => loadChatLanguage());
   const setChatLanguage = (value: ChatLanguage) => {
@@ -376,11 +391,13 @@ export function AppShell() {
     setHistoryOpen(false);
   };
   const selectChat = (id: string) => {
+    setNewChatTransition(false);
     setActiveChatId(id);
     setView("chat");
     setHistoryOpen(false);
   };
   const newChat = () => {
+    setNewChatTransition(true);
     setActiveChatId(null);
     setView("chat");
     setHistoryOpen(false);
@@ -476,13 +493,15 @@ export function AppShell() {
               : "translateX(-100%)"
             : "translateX(0)",
         }}
-        className={`fixed inset-y-0 left-0 z-10 hidden border-r border-border bg-sidebar md:block ${
+        className={`fixed inset-y-0 left-0 z-10 hidden h-dvh border-r border-border bg-sidebar md:block ${
           isDraggingSidebar ? "" : "transition-[transform,width] duration-300 ease-out"
         }`}
       >
         <Sidebar
           lang={lang}
           onToggleLang={toggleLang}
+          theme={theme}
+          onToggleTheme={toggleTheme}
           view={view}
           activeChatId={activeChatId}
           onSelectView={selectView}
@@ -548,6 +567,13 @@ export function AppShell() {
         <div className="flex items-center gap-1.5">
           <StudyTimerPill lang={lang} timer={timerState} actions={timerActions} subjects={subjects} />
           <button
+            onClick={toggleTheme}
+            aria-label={theme === "dark" ? strings.switchToLightModeLabel[lang] : strings.switchToDarkModeLabel[lang]}
+            className="rounded-md border border-border p-1.5 text-foreground-muted transition-colors duration-150 hover:text-foreground"
+          >
+            {theme === "dark" ? <Sun size={14} strokeWidth={1.75} /> : <Moon size={14} strokeWidth={1.75} />}
+          </button>
+          <button
             onClick={toggleLang}
             className="rounded-md border border-border px-2 py-1 text-xs text-foreground-muted transition-colors duration-150 hover:text-foreground"
           >
@@ -579,15 +605,28 @@ export function AppShell() {
             transition={{ duration: 0.18, ease: EASE }}
           >
             {view === "chat" && (
-              <ChatView
-                key={activeChat?.id ?? "new"}
-                lang={lang}
-                activeChat={activeChat}
-                plan={plan}
-                subjects={subjects}
-                chatLanguage={chatLanguage}
-                onOpenChat={selectChat}
-              />
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeChat?.id ?? "new"}
+                  initial={newChatTransition ? { opacity: 0, y: 6 } : false}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={
+                    newChatTransition
+                      ? { opacity: 0, y: -6, transition: { duration: 0.1, ease: EASE } }
+                      : undefined
+                  }
+                  transition={{ duration: newChatTransition ? 0.16 : 0, ease: EASE }}
+                >
+                  <ChatView
+                    lang={lang}
+                    activeChat={activeChat}
+                    plan={plan}
+                    subjects={subjects}
+                    chatLanguage={chatLanguage}
+                    onOpenChat={selectChat}
+                  />
+                </motion.div>
+              </AnimatePresence>
             )}
             {view === "progress" && (
               <ProgressView
@@ -675,6 +714,8 @@ export function AppShell() {
           <Sidebar
             lang={lang}
             onToggleLang={toggleLang}
+            theme={theme}
+            onToggleTheme={toggleTheme}
             view={view}
             activeChatId={activeChatId}
             onSelectView={selectView}
