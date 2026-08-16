@@ -42,12 +42,14 @@ function InlineEditableText({
   className,
   inputClassName,
   onEditingChange,
+  lang,
 }: {
   value: string;
   onSave: (next: string) => void;
   className?: string;
   inputClassName?: string;
   onEditingChange?: (editing: boolean) => void;
+  lang: Lang;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(value);
@@ -93,10 +95,20 @@ function InlineEditableText({
 
   return (
     <span
+      role="button"
+      tabIndex={0}
       onClick={(e) => {
         e.stopPropagation();
         startEditing();
       }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.stopPropagation();
+          startEditing();
+        }
+      }}
+      aria-label={strings.renameLabel[lang]}
       className={`cursor-text rounded px-0.5 -mx-0.5 transition-colors duration-150 hover:bg-surface-muted ${className ?? ""}`}
     >
       {value}
@@ -328,6 +340,7 @@ function ChapterRow({
               value={chapter.name[lang]}
               onSave={onRename}
               onEditingChange={setIsEditingText}
+              lang={lang}
               className={`truncate text-sm ${chapter.status === "mastered" ? "text-foreground-muted line-through" : ""}`}
             />
             {chapter.source === "custom" && (
@@ -676,7 +689,16 @@ function SubjectRow({
     >
       {justCompletedSubject && <CompletionCelebration />}
       <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={isExpanded}
         onClick={onToggleExpand}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggleExpand();
+          }
+        }}
         className="flex cursor-pointer items-center gap-3 px-5 py-4 transition-colors duration-150 hover:bg-surface-muted"
       >
         <span
@@ -693,6 +715,7 @@ function SubjectRow({
                 value={subject.name[lang]}
                 onSave={onRename}
                 onEditingChange={setIsRenamingSubject}
+                lang={lang}
                 className="truncate font-medium"
               />
               {isCompleted && (

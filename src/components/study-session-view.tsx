@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   X,
@@ -92,7 +92,7 @@ function SessionChat({ lang, chapterLabel }: { lang: Lang; chapterLabel: string 
             {messages.map((m, i) => (
               <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div
-                  className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
+                  className={`max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed wrap-break-word ${
                     m.role === "user"
                       ? "bg-accent text-accent-foreground"
                       : "border border-border bg-surface-muted"
@@ -189,6 +189,8 @@ export function StudySessionView({
   onFinish?: (subjectId: string, chapterId: string) => void;
 }) {
   const [tab, setTab] = useState<SessionTab>("chat");
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const idBase = useId();
   const recommended = getNextRecommendedChapter(subjects);
   const subjectName = recommended?.subjectName ?? suggestedTopic.subjectName;
   const chapterName = recommended?.chapter.name ?? suggestedTopic.chapterName;
@@ -200,6 +202,16 @@ export function StudySessionView({
     { key: "notebook", label: strings.notebookTitle[lang], icon: NotebookText },
     { key: "progress", label: strings.progress[lang], icon: BarChart3 },
   ];
+
+  const handleTabKeyDown = (e: React.KeyboardEvent) => {
+    if (!["ArrowLeft", "ArrowRight"].includes(e.key)) return;
+    e.preventDefault();
+    const currentIndex = tabs.findIndex((t) => t.key === tab);
+    const dir = e.key === "ArrowRight" ? 1 : -1;
+    const nextIndex = (currentIndex + dir + tabs.length) % tabs.length;
+    setTab(tabs[nextIndex].key);
+    tabRefs.current[nextIndex]?.focus();
+  };
 
   return (
     <motion.div
@@ -278,14 +290,23 @@ export function StudySessionView({
         </div>
 
         <div className="flex min-h-112 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-surface lg:min-h-0">
-          <div className="flex flex-wrap gap-1 border-b border-border p-2">
-            {tabs.map((t) => {
+          <div role="tablist" className="flex flex-wrap gap-1 border-b border-border p-2">
+            {tabs.map((t, i) => {
               const Icon = t.icon;
               const active = tab === t.key;
               return (
                 <button
                   key={t.key}
+                  ref={(el) => {
+                    tabRefs.current[i] = el;
+                  }}
+                  role="tab"
+                  id={`${idBase}-tab-${t.key}`}
+                  aria-selected={active}
+                  aria-controls={`${idBase}-panel-${tab}`}
+                  tabIndex={active ? 0 : -1}
                   onClick={() => setTab(t.key)}
+                  onKeyDown={handleTabKeyDown}
                   className={`flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
                     active ? "bg-accent-soft text-accent" : "text-foreground-muted hover:bg-surface-muted"
                   }`}
@@ -296,7 +317,12 @@ export function StudySessionView({
               );
             })}
           </div>
-          <div className="min-h-0 flex-1">
+          <div
+            className="min-h-0 flex-1"
+            role="tabpanel"
+            id={`${idBase}-panel-${tab}`}
+            aria-labelledby={`${idBase}-tab-${tab}`}
+          >
             {tab === "chat" && (
               <SessionChat lang={lang} chapterLabel={`${subjectName[lang]}: ${chapterName[lang]}`} />
             )}

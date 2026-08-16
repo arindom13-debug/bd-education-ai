@@ -14,7 +14,12 @@ export type ToastItem = {
 
 export function ToastStack({ toasts }: { toasts: ToastItem[] }) {
   return (
-    <div className="pointer-events-none fixed right-4 top-4 z-[60] flex w-[calc(100%-2rem)] max-w-xs flex-col gap-2 sm:right-6 sm:top-6">
+    <div
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      className="pointer-events-none fixed right-4 top-4 z-[60] flex w-[calc(100%-2rem)] max-w-xs flex-col gap-2 sm:right-6 sm:top-6"
+    >
       <AnimatePresence>
         {toasts.map((t) => (
           <motion.div

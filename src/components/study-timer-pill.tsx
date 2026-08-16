@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Check, Pause, Pencil, Play, RotateCcw, Square, Timer as TimerIcon } from "lucide-react";
 import { strings, type Lang } from "@/lib/i18n";
@@ -42,6 +42,7 @@ export function StudyTimerPill({
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const now = useTimerNow(timer.status);
 
   const active = timer.status === "running" || timer.status === "paused";
@@ -79,6 +80,30 @@ export function StudyTimerPill({
     return () => {
       document.removeEventListener("mousedown", handleClick);
       document.removeEventListener("keydown", handleKey);
+    };
+  }, [open]);
+
+  // Anchoring the popover with plain `right-0` assumes this pill sits at the
+  // true screen edge — true on desktop, false in the mobile header where it's
+  // one of several icons. Measuring the trigger and clamping to the viewport
+  // keeps the popover on-screen regardless of where the pill actually sits.
+  useLayoutEffect(() => {
+    if (!open || !ref.current) return;
+    const updatePosition = () => {
+      const trigger = ref.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const margin = 12;
+      const width = Math.min(320, window.innerWidth - margin * 2);
+      const left = Math.min(rect.right - width, window.innerWidth - width - margin);
+      setPopoverPos({ top: rect.bottom + 8, left: Math.max(margin, left), width });
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("orientationchange", updatePosition);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("orientationchange", updatePosition);
     };
   }, [open]);
 
@@ -124,14 +149,15 @@ export function StudyTimerPill({
       </motion.button>
 
       <AnimatePresence>
-        {open && (
+        {open && popoverPos && (
           <motion.div
             initial="hidden"
             animate="visible"
             exit="hidden"
             variants={popoverVariants}
             transition={{ duration: 0.18, ease: EASE }}
-            className="absolute right-0 top-full z-30 mt-2 max-h-[70vh] w-[min(20rem,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-border bg-surface p-4 shadow-lg"
+            style={{ position: "fixed", top: popoverPos.top, left: popoverPos.left, width: popoverPos.width }}
+            className="z-30 max-h-[70vh] overflow-y-auto rounded-2xl border border-border bg-surface p-4 shadow-lg"
           >
             {completed ? (
               <div className="flex flex-col gap-4">

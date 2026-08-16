@@ -149,6 +149,7 @@ export function Sidebar({
   onSelectView,
   onSelectChat,
   onNewChat,
+  onLogout,
   onCollapse,
   hideHeader = false,
   studentName,
@@ -167,6 +168,7 @@ export function Sidebar({
   onSelectView: (view: CanvasView) => void;
   onSelectChat: (id: string) => void;
   onNewChat: () => void;
+  onLogout: () => void;
   timer: TimerState;
   subjects: Subject[];
   onCollapse?: () => void;
@@ -253,7 +255,10 @@ export function Sidebar({
       </div>
 
       {/* MIDDLE SCROLLABLE — New Chat, navigation, Exam/Panic, and all chat history scroll together as one area */}
-      <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain">
+      <nav
+        aria-label={strings.mainNavigationLabel[lang]}
+        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
+      >
         <div className="flex flex-col gap-0.5 px-3 pb-1 pt-1.5">
           <button
             onClick={onNewChat}
@@ -359,7 +364,7 @@ export function Sidebar({
             );
           })}
         </div>
-      </div>
+      </nav>
 
       {/* BOTTOM FIXED — student profile only, never scrolls */}
       <div className="shrink-0">
@@ -373,6 +378,7 @@ export function Sidebar({
                 plan={plan}
                 onNavigate={onSelectView}
                 onClose={() => setMenuOpen(false)}
+                onLogout={onLogout}
               />
             )}
           </AnimatePresence>

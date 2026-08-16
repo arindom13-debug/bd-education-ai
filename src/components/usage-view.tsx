@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Sparkles,
   Clock,
@@ -111,12 +111,32 @@ function PeriodTabs({
     { value: "week", label: strings.usagePeriodWeek[lang] },
     { value: "month", label: strings.usagePeriodMonth[lang] },
   ];
+  const optionRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!["ArrowLeft", "ArrowRight"].includes(e.key)) return;
+    e.preventDefault();
+    const available = optionRefs.current.filter(Boolean) as HTMLButtonElement[];
+    if (available.length === 0) return;
+    const currentIndex = available.findIndex((el) => el === document.activeElement);
+    const dir = e.key === "ArrowRight" ? 1 : -1;
+    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + dir + available.length) % available.length;
+    available[nextIndex]?.focus();
+  };
+
   return (
-    <div className="grid grid-cols-3 gap-1 rounded-lg border border-border p-1">
-      {options.map((opt) => (
+    <div role="radiogroup" aria-label={strings.usagePeriodLabel[lang]} className="grid grid-cols-3 gap-1 rounded-lg border border-border p-1">
+      {options.map((opt, i) => (
         <button
           key={opt.value}
+          ref={(el) => {
+            optionRefs.current[i] = el;
+          }}
+          role="radio"
+          aria-checked={value === opt.value}
+          tabIndex={value === opt.value ? 0 : -1}
           onClick={() => onChange(opt.value)}
+          onKeyDown={handleKeyDown}
           className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
             value === opt.value ? "bg-accent-soft text-accent" : "text-foreground-muted hover:text-foreground"
           }`}

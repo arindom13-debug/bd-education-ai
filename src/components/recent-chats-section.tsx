@@ -1,9 +1,10 @@
 "use client";
 
+import { memo } from "react";
 import { motion } from "framer-motion";
 import { History, ArrowRight, MessageSquare } from "lucide-react";
 import { strings, type Lang } from "@/lib/i18n";
-import { chatHistory, type ConversationContext } from "@/lib/chat-data";
+import type { ChatThread, ConversationContext } from "@/lib/chat-data";
 import { subjects } from "@/lib/curriculum-data";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
@@ -19,13 +20,17 @@ const GROUPS: { key: "today" | "yesterday"; labelKey: keyof typeof strings }[] =
   { key: "yesterday", labelKey: "yesterday" },
 ];
 
-export function RecentChatsSection({
+export const RecentChatsSection = memo(function RecentChatsSection({
   lang,
+  threads: allThreads,
   onOpenChat,
 }: {
   lang: Lang;
+  threads: ChatThread[];
   onOpenChat: (id: string) => void;
 }) {
+  const chatHistory = allThreads.filter((t) => !t.archived);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 8 }}
@@ -87,4 +92,4 @@ export function RecentChatsSection({
       )}
     </motion.div>
   );
-}
+});

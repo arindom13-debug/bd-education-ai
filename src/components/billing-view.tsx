@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { AnimatePresence } from "framer-motion";
-import { Check, CreditCard, Receipt, RefreshCw, XCircle, Trash2, type LucideIcon } from "lucide-react";
+import { Check, CreditCard, Receipt, RefreshCw, XCircle, Trash2, AlertTriangle, CheckCircle2, type LucideIcon } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { EmptyState } from "@/components/empty-state";
 import { ToastStack, type ToastItem } from "@/components/toast";
@@ -24,9 +24,12 @@ type ModalState =
   | { kind: "addPayment" }
   | { kind: "removePayment"; id: string }
   | { kind: "upgrade"; planId: BillingPlanId }
+  | { kind: "changePlan" }
   | { kind: "cancel" }
   | { kind: "invoice"; invoice: Invoice }
   | null;
+
+const BILLING_ACTION_ERROR_RATE = 1 / 10;
 
 const INVOICE_STATUS_KEY: Record<InvoiceStatus, keyof typeof strings> = {
   paid: "billingInvoiceStatusPaid",
@@ -53,6 +56,33 @@ function formatExpiryInput(value: string): string {
   const digits = value.replace(/\D/g, "").slice(0, 4);
   if (digits.length <= 2) return digits;
   return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+}
+
+function SuccessBlock({
+  title,
+  desc,
+  doneLabel,
+  onDone,
+}: {
+  title: string;
+  desc: string;
+  doneLabel: string;
+  onDone: () => void;
+}) {
+  return (
+    <div role="status" className="flex flex-col items-center gap-3 py-4 text-center">
+      <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
+        <CheckCircle2 size={24} strokeWidth={1.75} />
+      </div>
+      <div>
+        <p className="text-sm font-semibold">{title}</p>
+        <p className="mt-1 text-xs text-foreground-muted">{desc}</p>
+      </div>
+      <button onClick={onDone} className="mt-1 rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground">
+        {doneLabel}
+      </button>
+    </div>
+  );
 }
 
 function PlanCard({
@@ -85,7 +115,23 @@ function PlanCard({
         <span className="text-xs text-foreground-muted">{plan.period[lang]}</span>
       </p>
       <p className="text-xs text-foreground-muted">{plan.billingCycle[lang]}</p>
-      <ul className="flex flex-col gap-2">
+
+      <div className="flex flex-col gap-1.5 border-t border-border pt-3">
+        <div className="flex items-center justify-between gap-3 text-xs">
+          <span className="text-foreground-muted">{strings.billingAiUsageLimitLabel[lang]}</span>
+          <span className="font-medium">{plan.aiUsageLimit[lang]}</span>
+        </div>
+        <div className="flex items-center justify-between gap-3 text-xs">
+          <span className="text-foreground-muted">{strings.billingAttachmentLimitLabel[lang]}</span>
+          <span className="font-medium">{plan.attachmentLimit[lang]}</span>
+        </div>
+        <div className="flex items-center justify-between gap-3 text-xs">
+          <span className="text-foreground-muted">{strings.billingVoiceInputLimitLabel[lang]}</span>
+          <span className="font-medium">{plan.voiceInputLimit[lang]}</span>
+        </div>
+      </div>
+
+      <ul className="flex flex-col gap-2 border-t border-border pt-3">
         {plan.features.map((f) => (
           <li key={f[lang]} className="flex items-start gap-2 text-xs text-foreground-muted">
             <Check size={13} strokeWidth={2} className="mt-0.5 shrink-0 text-foreground" />
@@ -116,6 +162,11 @@ export function BillingView({ lang }: { lang: Lang }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const toastIdRef = useRef(0);
   const paymentIdRef = useRef(0);
+  const [changePlanSelection, setChangePlanSelection] = useState<BillingPlanId | null>(null);
+  const [changePlanSuccess, setChangePlanSuccess] = useState(false);
+  const [changePlanError, setChangePlanError] = useState(false);
+  const [cancelSuccess, setCancelSuccess] = useState(false);
+  const [cancelError, setCancelError] = useState(false);
 
   const currentPlan = billingPlans.find((p) => p.id === currentPlanId)!;
   const upgradeTargetPlan = modal?.kind === "upgrade" ? billingPlans.find((p) => p.id === modal.planId)! : null;
@@ -124,6 +175,35 @@ export function BillingView({ lang }: { lang: Lang }) {
       ? `You'll be switched to the ${upgradeTargetPlan.name.en} plan (${upgradeTargetPlan.price.en}${upgradeTargetPlan.period.en}). This is a mock upgrade — no payment will be processed.`
       : `তুমি ${upgradeTargetPlan.name.bn} প্ল্যানে (${upgradeTargetPlan.price.bn}${upgradeTargetPlan.period.bn}) পরিবর্তিত হবে। এটি একটি মক আপগ্রেড — কোনো পেমেন্ট প্রক্রিয়া করা হবে না।`
     : "";
+
+  const changePlanTarget = changePlanSelection ? billingPlans.find((p) => p.id === changePlanSelection)! : null;
+  const showPlanComparison = changePlanTarget !== null && changePlanTarget.id !== currentPlanId;
+  const isDowngrade = currentPlanId === "premium" && changePlanTarget?.id === "free";
+  const comparisonRows = changePlanTarget
+    ? [
+        {
+          label: strings.billingPriceLabel[lang],
+          from: `${currentPlan.price[lang]}${currentPlan.period[lang]}`,
+          to: `${changePlanTarget.price[lang]}${changePlanTarget.period[lang]}`,
+        },
+        { label: strings.billingCycleLabel[lang], from: currentPlan.billingCycle[lang], to: changePlanTarget.billingCycle[lang] },
+        {
+          label: strings.billingAiUsageLimitLabel[lang],
+          from: currentPlan.aiUsageLimit[lang],
+          to: changePlanTarget.aiUsageLimit[lang],
+        },
+        {
+          label: strings.billingAttachmentLimitLabel[lang],
+          from: currentPlan.attachmentLimit[lang],
+          to: changePlanTarget.attachmentLimit[lang],
+        },
+        {
+          label: strings.billingVoiceInputLimitLabel[lang],
+          from: currentPlan.voiceInputLimit[lang],
+          to: changePlanTarget.voiceInputLimit[lang],
+        },
+      ]
+    : [];
 
   const pushToast = (title: string, description: string, icon: LucideIcon) => {
     const id = `toast-${toastIdRef.current++}`;
@@ -185,10 +265,40 @@ export function BillingView({ lang }: { lang: Lang }) {
     pushToast(strings.billingUpgradeSuccessToastTitle[lang], desc, Check);
   };
 
+  const openChangePlan = (preselect?: BillingPlanId) => {
+    setChangePlanSelection(preselect ?? null);
+    setChangePlanSuccess(false);
+    setChangePlanError(false);
+    setModal({ kind: "changePlan" });
+  };
+
+  const confirmChangePlan = () => {
+    if (!changePlanTarget) return;
+    setChangePlanError(false);
+    // Mock failure — selection stays exactly as chosen, so Retry re-applies
+    // the same target plan rather than needing to be picked again.
+    if (Math.random() < BILLING_ACTION_ERROR_RATE) {
+      setChangePlanError(true);
+      return;
+    }
+    setCurrentPlanId(changePlanTarget.id);
+    setChangePlanSuccess(true);
+  };
+
+  const openCancelModal = () => {
+    setCancelSuccess(false);
+    setCancelError(false);
+    setModal({ kind: "cancel" });
+  };
+
   const confirmCancel = () => {
+    setCancelError(false);
+    if (Math.random() < BILLING_ACTION_ERROR_RATE) {
+      setCancelError(true);
+      return;
+    }
     setCurrentPlanId("free");
-    setModal(null);
-    pushToast(strings.billingCancelSuccessToastTitle[lang], strings.billingCancelSuccessToastDesc[lang], XCircle);
+    setCancelSuccess(true);
   };
 
   return (
@@ -245,17 +355,33 @@ export function BillingView({ lang }: { lang: Lang }) {
                 {currentPlan.period[lang]}
               </p>
             </div>
+            <div>
+              <p className="text-[10px] font-medium uppercase tracking-wide text-foreground-muted">
+                {strings.billingAiUsageLimitLabel[lang]}
+              </p>
+              <p className="mt-0.5 text-sm font-medium">{currentPlan.aiUsageLimit[lang]}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-medium uppercase tracking-wide text-foreground-muted">
+                {strings.billingAttachmentLimitLabel[lang]}
+              </p>
+              <p className="mt-0.5 text-sm font-medium">{currentPlan.attachmentLimit[lang]}</p>
+            </div>
+            <div>
+              <p className="text-[10px] font-medium uppercase tracking-wide text-foreground-muted">
+                {strings.billingVoiceInputLimitLabel[lang]}
+              </p>
+              <p className="mt-0.5 text-sm font-medium">{currentPlan.voiceInputLimit[lang]}</p>
+            </div>
           </div>
 
           <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-4">
-            {currentPlanId !== "premium" && (
-              <button
-                onClick={() => setModal({ kind: "upgrade", planId: "premium" })}
-                className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-accent-foreground transition-transform hover:scale-[1.02] active:scale-95"
-              >
-                {strings.billingUpgradePlanBtn[lang]}
-              </button>
-            )}
+            <button
+              onClick={() => openChangePlan()}
+              className="rounded-lg bg-accent px-4 py-2 text-xs font-medium text-accent-foreground transition-transform hover:scale-[1.02] active:scale-95"
+            >
+              {strings.billingChangePlanBtn[lang]}
+            </button>
             <button
               onClick={notifyComingSoon}
               className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-xs font-medium text-foreground-muted transition-colors duration-150 hover:text-foreground"
@@ -264,7 +390,7 @@ export function BillingView({ lang }: { lang: Lang }) {
               {strings.billingManageSubscriptionBtn[lang]}
             </button>
             <button
-              onClick={() => setModal({ kind: "cancel" })}
+              onClick={openCancelModal}
               className="flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-xs font-medium text-foreground-muted transition-colors duration-150 hover:text-foreground"
             >
               <XCircle size={12} strokeWidth={1.75} />
@@ -396,7 +522,7 @@ export function BillingView({ lang }: { lang: Lang }) {
                 lang={lang}
                 plan={plan}
                 isCurrent={plan.id === currentPlanId}
-                onUpgrade={() => setModal({ kind: "upgrade", planId: plan.id })}
+                onUpgrade={() => openChangePlan(plan.id)}
               />
             ))}
           </div>
@@ -440,6 +566,8 @@ export function BillingView({ lang }: { lang: Lang }) {
                 <label className="flex flex-col gap-1.5">
                   <span className="text-xs font-medium text-foreground-muted">{strings.billingCvcLabel[lang]}</span>
                   <input
+                    type="password"
+                    autoComplete="off"
                     value={form.cvc}
                     onChange={(e) => setForm((f) => ({ ...f, cvc: e.target.value.replace(/\D/g, "").slice(0, 4) }))}
                     placeholder="123"
@@ -507,6 +635,113 @@ export function BillingView({ lang }: { lang: Lang }) {
           </Modal>
         )}
 
+        {modal?.kind === "changePlan" && (
+          <Modal title={strings.billingChangePlanModalTitle[lang]} onClose={() => setModal(null)}>
+            {changePlanSuccess && changePlanTarget ? (
+              <SuccessBlock
+                title={strings.billingChangePlanSuccessTitle[lang]}
+                desc={
+                  lang === "en"
+                    ? `You're now on the ${changePlanTarget.name.en} plan. This is a mock change — no payment was processed.`
+                    : `তুমি এখন ${changePlanTarget.name.bn} প্ল্যানে আছ। এটি একটি মক পরিবর্তন — কোনো পেমেন্ট প্রক্রিয়া করা হয়নি।`
+                }
+                doneLabel={strings.doneBtn[lang]}
+                onDone={() => setModal(null)}
+              />
+            ) : (
+              <div className="flex flex-col gap-4">
+                <div>
+                  <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">
+                    {strings.billingChangePlanSelectLabel[lang]}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {billingPlans.map((p) => (
+                      <button
+                        key={p.id}
+                        onClick={() => setChangePlanSelection(p.id)}
+                        className={`rounded-lg border p-3 text-left transition-colors duration-150 ${
+                          changePlanSelection === p.id ? "border-accent bg-accent-soft" : "border-border hover:border-accent"
+                        }`}
+                      >
+                        <p className="flex items-center justify-between gap-2 text-sm font-semibold">
+                          {p.name[lang]}
+                          {p.id === currentPlanId && (
+                            <span className="rounded-full bg-surface-muted px-1.5 py-0.5 text-[10px] font-medium text-foreground-muted">
+                              {strings.billingCurrentPlanBadge[lang]}
+                            </span>
+                          )}
+                        </p>
+                        <p className="mt-0.5 text-xs text-foreground-muted">
+                          {p.price[lang]}
+                          {p.period[lang]}
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {showPlanComparison && changePlanTarget && (
+                  <>
+                    <div className="rounded-lg border border-border p-3">
+                      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-foreground-muted">
+                        {strings.billingComparisonLabel[lang]}
+                      </p>
+                      <div className="flex flex-col gap-1.5">
+                        {comparisonRows.map((row) => (
+                          <div key={row.label} className="flex items-center justify-between gap-3 text-xs">
+                            <span className="shrink-0 text-foreground-muted">{row.label}</span>
+                            <span className="text-right font-medium">
+                              {row.from} <span className="text-foreground-faint">→</span> {row.to}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {isDowngrade && (
+                      <div className="rounded-lg border border-warning/30 bg-warning/10 p-3">
+                        <p className="flex items-center gap-1.5 text-xs font-medium text-warning">
+                          <AlertTriangle size={13} strokeWidth={1.75} />
+                          {strings.billingDowngradeWarningTitle[lang]}
+                        </p>
+                        <ul className="mt-2 flex flex-col gap-1.5">
+                          {currentPlan.features.map((f) => (
+                            <li key={f[lang]} className="text-xs text-foreground-muted">
+                              • {f[lang]}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {changePlanError && (
+                      <div role="alert" className="rounded-lg bg-danger/10 p-3">
+                        <p className="text-xs font-medium text-danger">{strings.billingActionFailedTitle[lang]}</p>
+                        <p className="mt-0.5 text-xs text-foreground-muted">{strings.billingChangePlanFailedDesc[lang]}</p>
+                      </div>
+                    )}
+
+                    <div className="flex justify-end gap-2">
+                      <button
+                        onClick={() => setModal(null)}
+                        className="rounded-lg border border-border px-4 py-2 text-sm text-foreground-muted transition-colors duration-150 hover:text-foreground"
+                      >
+                        {strings.cancelBtn[lang]}
+                      </button>
+                      <button
+                        onClick={confirmChangePlan}
+                        className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground"
+                      >
+                        {strings.billingChangePlanConfirmBtn[lang]}
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </Modal>
+        )}
+
         {modal?.kind === "cancel" &&
           (currentPlanId === "free" ? (
             <Modal title={strings.billingCancelNothingTitle[lang]} onClose={() => setModal(null)}>
@@ -522,18 +757,35 @@ export function BillingView({ lang }: { lang: Lang }) {
             </Modal>
           ) : (
             <Modal title={strings.billingCancelConfirmTitle[lang]} onClose={() => setModal(null)}>
-              <p className="text-sm text-foreground-muted">{strings.billingCancelConfirmDesc[lang]}</p>
-              <div className="mt-4 flex justify-end gap-2">
-                <button
-                  onClick={() => setModal(null)}
-                  className="rounded-lg border border-border px-4 py-2 text-sm text-foreground-muted transition-colors duration-150 hover:text-foreground"
-                >
-                  {strings.cancelBtn[lang]}
-                </button>
-                <button onClick={confirmCancel} className="rounded-lg bg-danger px-4 py-2 text-sm font-medium text-white">
-                  {strings.confirmBtn[lang]}
-                </button>
-              </div>
+              {cancelSuccess ? (
+                <SuccessBlock
+                  title={strings.billingCancelSuccessToastTitle[lang]}
+                  desc={strings.billingCancelSuccessToastDesc[lang]}
+                  doneLabel={strings.doneBtn[lang]}
+                  onDone={() => setModal(null)}
+                />
+              ) : (
+                <>
+                  <p className="text-sm text-foreground-muted">{strings.billingCancelConfirmDesc[lang]}</p>
+                  {cancelError && (
+                    <div role="alert" className="mt-3 rounded-lg bg-danger/10 p-3">
+                      <p className="text-xs font-medium text-danger">{strings.billingActionFailedTitle[lang]}</p>
+                      <p className="mt-0.5 text-xs text-foreground-muted">{strings.billingCancelFailedDesc[lang]}</p>
+                    </div>
+                  )}
+                  <div className="mt-4 flex justify-end gap-2">
+                    <button
+                      onClick={() => setModal(null)}
+                      className="rounded-lg border border-border px-4 py-2 text-sm text-foreground-muted transition-colors duration-150 hover:text-foreground"
+                    >
+                      {strings.billingKeepSubscriptionBtn[lang]}
+                    </button>
+                    <button onClick={confirmCancel} className="rounded-lg bg-danger px-4 py-2 text-sm font-medium text-white">
+                      {strings.billingConfirmCancellationBtn[lang]}
+                    </button>
+                  </div>
+                </>
+              )}
             </Modal>
           ))}
 

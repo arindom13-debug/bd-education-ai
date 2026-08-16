@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
 import { Menu, PanelLeftOpen, Sun, Moon, Search } from "lucide-react";
 import { Sidebar, BrandMark, type CanvasView } from "@/components/sidebar";
@@ -23,9 +23,11 @@ import { InviteFriendsView } from "@/components/invite-friends-view";
 import { NotificationBell } from "@/components/notification-bell";
 import { GlobalSearch } from "@/components/global-search";
 import { KeyboardShortcutsModal } from "@/components/keyboard-shortcuts-modal";
+import { OfflineBanner } from "@/components/offline-banner";
+import { Modal } from "@/components/modal";
 import { Tooltip } from "@/components/tooltip";
 import { strings, type Lang } from "@/lib/i18n";
-import { chatHistory, onboardingThread } from "@/lib/chat-data";
+import { chatHistory, onboardingThread, type ChatThread } from "@/lib/chat-data";
 import { loadStudyPlan, saveStudyPlan, classLevelOptions, type StudyPlan } from "@/lib/study-plan";
 import { subjects as initialSubjects, type Subject, type Chapter, type ChapterStatus } from "@/lib/curriculum-data";
 import { loadChatLanguage, saveChatLanguage, type ChatLanguage } from "@/lib/chat-language";
@@ -46,6 +48,7 @@ import {
   type AppNotification,
   type NotificationPreferences,
 } from "@/lib/notifications-data";
+import { defaultAccountPreferences, type AccountPreferences } from "@/lib/preferences-data";
 import { MainCountdownStrip } from "@/components/main-countdown-strip";
 import { StudyTimerPill } from "@/components/study-timer-pill";
 import { StudyScheduleView } from "@/components/study-schedule-view";
@@ -112,6 +115,9 @@ export function AppShell() {
   const [lang, setLang] = useState<Lang>("en");
   const [view, setView] = useState<CanvasView>("chat");
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  // Seeded from the static mock export, then mutated locally so rename/archive/
+  // delete/clear (Chat's conversation menu) can actually take effect.
+  const [chatThreads, setChatThreads] = useState<ChatThread[]>(() => chatHistory);
   const [historyOpen, setHistoryOpen] = useState(false);
   // Gates the New Chat fade/slide transition: newChat() sets it true so that
   // one chat-panel swap animates, selectChat() clears it so every other
@@ -301,6 +307,14 @@ export function AppShell() {
   const updateNotificationPreference = (key: keyof NotificationPreferences, value: boolean) =>
     setNotificationPreferences((prev) => ({ ...prev, [key]: value }));
 
+  // Settings → General → Preferences — local/mock only, lives here (not inside
+  // SettingsView) purely so it survives navigating away from Settings and back.
+  const [accountPreferences, setAccountPreferences] = useState<AccountPreferences>(defaultAccountPreferences);
+  // Frontend-only inactivity simulation for Settings → Privacy & Security's
+  // Auto-lock preference. No real session/auth is involved.
+  const [sessionExpired, setSessionExpired] = useState(false);
+  const inactivityTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const [searchOpen, setSearchOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [newNoteToken, setNewNoteToken] = useState(0);
@@ -450,7 +464,7 @@ export function AppShell() {
   const activeChat =
     activeChatId === onboardingThread.id
       ? onboardingThread
-      : chatHistory.find((c) => c.id === activeChatId) ?? null;
+      : chatThreads.find((c) => c.id === activeChatId) ?? null;
 
   const selectView = (v: CanvasView) => {
     setView(v);
@@ -467,6 +481,60 @@ export function AppShell() {
     setActiveChatId(null);
     setView("chat");
     setHistoryOpen(false);
+  };
+
+  const renameChat = (id: string, title: string) =>
+    setChatThreads((prev) => prev.map((t) => (t.id === id ? { ...t, title: { en: title, bn: title } } : t)));
+  const archiveChat = (id: string) => {
+    setChatThreads((prev) => prev.map((t) => (t.id === id ? { ...t, archived: true } : t)));
+    if (activeChatId === id) newChat();
+  };
+  const deleteChat = (id: string) => {
+    setChatThreads((prev) => prev.filter((t) => t.id !== id));
+    if (activeChatId === id) newChat();
+  };
+  const clearChatMessages = (id: string) =>
+    setChatThreads((prev) => prev.map((t) => (t.id === id ? { ...t, messages: [] } : t)));
+
+  // Frontend-only mock: after N minutes with no mouse/keyboard/touch/scroll
+  // activity, show the session-expired dialog below. Nothing is deleted —
+  // Continue/Sign in again both just dismiss it and resume.
+  useEffect(() => {
+    const minutes = accountPreferences.sessionTimeoutMinutes;
+    if (minutes === "never") return;
+    const durationMs = Number(minutes) * 60_000;
+    const resetTimer = () => {
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+      inactivityTimerRef.current = setTimeout(() => setSessionExpired(true), durationMs);
+    };
+    const events: (keyof WindowEventMap)[] = ["mousedown", "keydown", "touchstart", "scroll"];
+    events.forEach((e) => window.addEventListener(e, resetTimer));
+    resetTimer();
+    return () => {
+      events.forEach((e) => window.removeEventListener(e, resetTimer));
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+    };
+  }, [accountPreferences.sessionTimeoutMinutes]);
+
+  const continueSession = () => setSessionExpired(false);
+
+  // Neither this nor the account menu's Log out has a real "logged out"
+  // screen to send the user to (no auth exists) — both instead clear the
+  // sensitive in-memory UI state the Privacy & Security hardening pass calls
+  // out (the open conversation and any open overlays) and return to a clean
+  // chat landing.
+  const clearSensitiveUiState = () => {
+    newChat();
+    setSearchOpen(false);
+    setShortcutsOpen(false);
+    setHistoryOpen(false);
+  };
+  const signInAgain = () => {
+    setSessionExpired(false);
+    clearSensitiveUiState();
+  };
+  const handleLogout = () => {
+    clearSensitiveUiState();
   };
 
   useEffect(() => {
@@ -611,6 +679,7 @@ export function AppShell() {
           onSelectView={selectView}
           onSelectChat={selectChat}
           onNewChat={newChat}
+          onLogout={handleLogout}
           onCollapse={() => setSidebarCollapsed(true)}
           studentName={studentName}
           studentClassLabel={studentClassLabel}
@@ -712,6 +781,7 @@ export function AppShell() {
           sidebarCollapsed ? "md:ml-0" : "md:ml-(--sidebar-w)"
         }`}
       >
+        <OfflineBanner lang={lang} />
         <AnimatePresence mode="wait">
           <motion.div
             key={view}
@@ -736,10 +806,15 @@ export function AppShell() {
                   <ChatView
                     lang={lang}
                     activeChat={activeChat}
+                    chatThreads={chatThreads}
                     plan={plan}
                     subjects={subjects}
                     chatLanguage={chatLanguage}
                     onOpenChat={selectChat}
+                    onRenameChat={renameChat}
+                    onArchiveChat={archiveChat}
+                    onDeleteChat={deleteChat}
+                    onClearChatMessages={clearChatMessages}
                   />
                 </motion.div>
               </AnimatePresence>
@@ -838,6 +913,8 @@ export function AppShell() {
                 onChangeChatLanguage={setChatLanguage}
                 notificationPreferences={notificationPreferences}
                 onChangeNotificationPreference={updateNotificationPreference}
+                accountPreferences={accountPreferences}
+                onChangeAccountPreferences={setAccountPreferences}
               />
             )}
             {view === "usage" && <UsageView lang={lang} onNavigate={selectView} />}
@@ -871,6 +948,7 @@ export function AppShell() {
             onSelectView={selectView}
             onSelectChat={selectChat}
             onNewChat={newChat}
+            onLogout={handleLogout}
             studentName={studentName}
             studentClassLabel={studentClassLabel}
             plan={plan}
@@ -903,6 +981,27 @@ export function AppShell() {
       <AnimatePresence>
         {shortcutsOpen && (
           <KeyboardShortcutsModal lang={lang} onClose={() => setShortcutsOpen(false)} />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {sessionExpired && (
+          <Modal title={strings.sessionExpiredTitle[lang]} onClose={continueSession}>
+            <p className="text-sm text-foreground-muted">{strings.sessionExpiredDesc[lang]}</p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={continueSession}
+                className="rounded-lg border border-border px-4 py-2 text-sm text-foreground-muted transition-colors duration-150 hover:text-foreground"
+              >
+                {strings.sessionContinueBtn[lang]}
+              </button>
+              <button
+                onClick={signInAgain}
+                className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-accent-foreground"
+              >
+                {strings.sessionSignInAgainBtn[lang]}
+              </button>
+            </div>
+          </Modal>
         )}
       </AnimatePresence>
     </MotionConfig>

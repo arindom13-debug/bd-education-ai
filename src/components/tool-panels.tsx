@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Play,
@@ -671,24 +671,67 @@ export function SavedAnswersPanel({ lang }: { lang: Lang }) {
 
 export function MyLibraryPanel({ lang }: { lang: Lang }) {
   const [tab, setTab] = useState<"aiNotebook" | "savedAnswers">("aiNotebook");
+  const notebookTabRef = useRef<HTMLButtonElement>(null);
+  const savedTabRef = useRef<HTMLButtonElement>(null);
+  const idBase = useId();
   const tabClass = (active: boolean) =>
     `flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
       active ? "bg-accent-soft text-accent" : "text-foreground-muted hover:text-foreground"
     }`;
 
+  const handleTabKeyDown = (e: React.KeyboardEvent) => {
+    if (!["ArrowLeft", "ArrowRight"].includes(e.key)) return;
+    e.preventDefault();
+    if (tab === "aiNotebook") {
+      setTab("savedAnswers");
+      savedTabRef.current?.focus();
+    } else {
+      setTab("aiNotebook");
+      notebookTabRef.current?.focus();
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex gap-1 rounded-lg border border-border p-1">
-        <button onClick={() => setTab("aiNotebook")} className={tabClass(tab === "aiNotebook")}>
+      <div role="tablist" className="flex gap-1 rounded-lg border border-border p-1">
+        <button
+          ref={notebookTabRef}
+          role="tab"
+          id={`${idBase}-tab-notebook`}
+          aria-selected={tab === "aiNotebook"}
+          aria-controls={`${idBase}-panel-notebook`}
+          tabIndex={tab === "aiNotebook" ? 0 : -1}
+          onClick={() => setTab("aiNotebook")}
+          onKeyDown={handleTabKeyDown}
+          className={tabClass(tab === "aiNotebook")}
+        >
           <Sparkles size={13} strokeWidth={1.75} />
           {strings.aiNotebookTitle[lang]}
         </button>
-        <button onClick={() => setTab("savedAnswers")} className={tabClass(tab === "savedAnswers")}>
+        <button
+          ref={savedTabRef}
+          role="tab"
+          id={`${idBase}-tab-saved`}
+          aria-selected={tab === "savedAnswers"}
+          aria-controls={`${idBase}-panel-saved`}
+          tabIndex={tab === "savedAnswers" ? 0 : -1}
+          onClick={() => setTab("savedAnswers")}
+          onKeyDown={handleTabKeyDown}
+          className={tabClass(tab === "savedAnswers")}
+        >
           <FileCheck2 size={13} strokeWidth={1.75} />
           {strings.savedAnswersTitle[lang]}
         </button>
       </div>
-      {tab === "aiNotebook" ? <AiNotebookPanel lang={lang} /> : <SavedAnswersPanel lang={lang} />}
+      {tab === "aiNotebook" ? (
+        <div role="tabpanel" id={`${idBase}-panel-notebook`} aria-labelledby={`${idBase}-tab-notebook`}>
+          <AiNotebookPanel lang={lang} />
+        </div>
+      ) : (
+        <div role="tabpanel" id={`${idBase}-panel-saved`} aria-labelledby={`${idBase}-tab-saved`}>
+          <SavedAnswersPanel lang={lang} />
+        </div>
+      )}
     </div>
   );
 }

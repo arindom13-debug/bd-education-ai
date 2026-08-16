@@ -56,6 +56,7 @@ export function ProfilePanel({
   plan,
   onNavigate,
   onClose,
+  onLogout,
 }: {
   lang: Lang;
   studentName: string;
@@ -63,6 +64,7 @@ export function ProfilePanel({
   plan: StudyPlan;
   onNavigate: (view: CanvasView) => void;
   onClose: () => void;
+  onLogout: () => void;
 }) {
   const boardLabel = curriculumTrackOptions.find((o) => o.value === plan.curriculumTrack)?.label[lang] ?? "";
   const examTargetLabel = examTargetOptions.find((o) => o.value === plan.examTarget)?.label[lang] ?? "";
@@ -140,7 +142,10 @@ export function ProfilePanel({
           </button>
         ))}
         <button
-          onClick={onClose}
+          onClick={() => {
+            onLogout();
+            onClose();
+          }}
           className="flex items-center gap-2.5 rounded-md px-2.5 py-2 text-left text-sm text-warning hover:bg-warning/10"
         >
           <LogOut size={15} strokeWidth={1.75} />

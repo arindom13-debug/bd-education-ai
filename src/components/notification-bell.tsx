@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Bell,
@@ -45,7 +45,15 @@ function NotificationRow({
   const Icon = TYPE_ICON[notification.type];
   return (
     <div
+      role="button"
+      tabIndex={0}
       onClick={() => onMarkRead(notification.id)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onMarkRead(notification.id);
+        }
+      }}
       className={`group relative flex cursor-pointer gap-3 rounded-lg py-2.5 pl-2.5 pr-8 transition-colors duration-150 hover:bg-surface-muted ${
         notification.read ? "" : "bg-accent-soft"
       }`}
@@ -96,6 +104,7 @@ export function NotificationBell({
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const unreadCount = notifications.filter((n) => !n.read).length;
 
   useEffect(() => {
@@ -111,6 +120,30 @@ export function NotificationBell({
     return () => {
       document.removeEventListener("mousedown", handleClick);
       document.removeEventListener("keydown", handleKey);
+    };
+  }, [open]);
+
+  // Anchoring with plain `right-0` assumes this bell sits at the true screen
+  // edge — true on desktop, false in the mobile header where it's one of
+  // several icons. Measuring the trigger and clamping to the viewport keeps
+  // the popover on-screen regardless of where the bell actually sits.
+  useLayoutEffect(() => {
+    if (!open || !ref.current) return;
+    const updatePosition = () => {
+      const trigger = ref.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const margin = 12;
+      const width = Math.min(352, window.innerWidth - margin * 2);
+      const left = Math.min(rect.right - width, window.innerWidth - width - margin);
+      setPopoverPos({ top: rect.bottom + 8, left: Math.max(margin, left), width });
+    };
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
+    window.addEventListener("orientationchange", updatePosition);
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      window.removeEventListener("orientationchange", updatePosition);
     };
   }, [open]);
 
@@ -130,14 +163,15 @@ export function NotificationBell({
       </button>
 
       <AnimatePresence>
-        {open && (
+        {open && popoverPos && (
           <motion.div
             initial="hidden"
             animate="visible"
             exit="hidden"
             variants={popoverVariants}
             transition={{ duration: 0.18, ease: EASE }}
-            className="absolute right-0 top-full z-30 mt-2 max-h-[70vh] w-[min(22rem,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-border bg-surface p-3 shadow-lg"
+            style={{ position: "fixed", top: popoverPos.top, left: popoverPos.left, width: popoverPos.width }}
+            className="z-30 max-h-[70vh] overflow-y-auto rounded-2xl border border-border bg-surface p-3 shadow-lg"
           >
             <div className="flex items-center justify-between gap-3 px-1 pb-2">
               <p className="text-sm font-semibold text-foreground-strong">{strings.notificationsTitle[lang]}</p>

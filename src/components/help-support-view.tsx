@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   LifeBuoy,
@@ -101,9 +101,13 @@ function fieldClass(hasError?: boolean): string {
   } bg-control px-3 py-2 text-sm outline-none transition-colors duration-150 placeholder:text-foreground-faint focus:border-foreground-faint`;
 }
 
-function FieldError({ show, message }: { show?: boolean; message: string }) {
+function FieldError({ show, message, id }: { show?: boolean; message: string; id?: string }) {
   if (!show) return null;
-  return <p className="text-xs text-danger">{message}</p>;
+  return (
+    <p id={id} role="alert" className="text-xs text-danger">
+      {message}
+    </p>
+  );
 }
 
 function SuccessView({
@@ -118,7 +122,7 @@ function SuccessView({
   onDone: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center gap-3 py-4 text-center">
+    <div role="status" className="flex flex-col items-center gap-3 py-4 text-center">
       <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-success/15 text-success">
         <CheckCircle2 size={24} strokeWidth={1.75} />
       </div>
@@ -202,6 +206,7 @@ const contactCards: { id: "contact" | "report" | "feedback"; icon: LucideIcon; t
 ];
 
 export function HelpSupportView({ lang }: { lang: Lang }) {
+  const idBase = useId();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<HelpCategory | "all">("all");
   const [openFaqId, setOpenFaqId] = useState<string | null>(null);
@@ -424,10 +429,11 @@ export function HelpSupportView({ lang }: { lang: Lang }) {
           <p className="text-xs font-medium uppercase tracking-wide text-foreground-muted">{strings.helpGetInTouchLabel[lang]}</p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {contactCards.map((card) => (
-              <div
+              <button
                 key={card.id}
+                type="button"
                 onClick={() => openModal(card.id)}
-                className="group flex cursor-pointer flex-col gap-3 rounded-2xl border border-border bg-surface p-5 transition-colors duration-200 hover:bg-surface-muted"
+                className="group flex w-full cursor-pointer flex-col gap-3 rounded-2xl border border-border bg-surface p-5 text-left transition-colors duration-200 hover:bg-surface-muted"
               >
                 <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-surface-muted text-foreground transition-colors duration-200 group-hover:text-foreground-strong">
                   <card.icon size={18} strokeWidth={1.75} />
@@ -439,7 +445,7 @@ export function HelpSupportView({ lang }: { lang: Lang }) {
                 <span className="text-xs font-medium text-foreground-muted transition-colors duration-200 group-hover:text-foreground">
                   {strings.helpOpenBtn[lang]} →
                 </span>
-              </div>
+              </button>
             ))}
           </div>
         </div>
@@ -458,20 +464,36 @@ export function HelpSupportView({ lang }: { lang: Lang }) {
             ) : (
               <div className="flex flex-col gap-3">
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-xs font-medium text-foreground-muted">{strings.helpSubjectLabel[lang]}</span>
+                  <span className="text-xs font-medium text-foreground-muted">
+                    {strings.helpSubjectLabel[lang]} <span aria-hidden>*</span>
+                  </span>
                   <input
                     value={contactForm.subject}
                     onChange={(e) => setContactForm((f) => ({ ...f, subject: e.target.value }))}
                     placeholder={strings.helpSubjectPlaceholder[lang]}
+                    required
+                    aria-required="true"
+                    aria-invalid={contactErrors.subject || undefined}
+                    aria-describedby={contactErrors.subject ? `${idBase}-contact-subject-error` : undefined}
                     className={fieldClass(contactErrors.subject)}
                   />
-                  <FieldError show={contactErrors.subject} message={strings.helpFieldRequiredError[lang]} />
+                  <FieldError
+                    show={contactErrors.subject}
+                    message={strings.helpFieldRequiredError[lang]}
+                    id={`${idBase}-contact-subject-error`}
+                  />
                 </label>
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-xs font-medium text-foreground-muted">{strings.helpSupportCategoryLabel[lang]}</span>
+                  <span className="text-xs font-medium text-foreground-muted">
+                    {strings.helpSupportCategoryLabel[lang]} <span aria-hidden>*</span>
+                  </span>
                   <select
                     value={contactForm.category}
                     onChange={(e) => setContactForm((f) => ({ ...f, category: e.target.value as SupportCategory }))}
+                    required
+                    aria-required="true"
+                    aria-invalid={contactErrors.category || undefined}
+                    aria-describedby={contactErrors.category ? `${idBase}-contact-category-error` : undefined}
                     className={fieldClass(contactErrors.category)}
                   >
                     <option value="">{strings.helpSelectCategoryPlaceholder[lang]}</option>
@@ -481,18 +503,32 @@ export function HelpSupportView({ lang }: { lang: Lang }) {
                       </option>
                     ))}
                   </select>
-                  <FieldError show={contactErrors.category} message={strings.helpSelectCategoryError[lang]} />
+                  <FieldError
+                    show={contactErrors.category}
+                    message={strings.helpSelectCategoryError[lang]}
+                    id={`${idBase}-contact-category-error`}
+                  />
                 </label>
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-xs font-medium text-foreground-muted">{strings.helpMessageLabel[lang]}</span>
+                  <span className="text-xs font-medium text-foreground-muted">
+                    {strings.helpMessageLabel[lang]} <span aria-hidden>*</span>
+                  </span>
                   <textarea
                     value={contactForm.message}
                     onChange={(e) => setContactForm((f) => ({ ...f, message: e.target.value }))}
                     rows={4}
                     placeholder={strings.helpFeedbackPlaceholder[lang]}
+                    required
+                    aria-required="true"
+                    aria-invalid={contactErrors.message || undefined}
+                    aria-describedby={contactErrors.message ? `${idBase}-contact-message-error` : undefined}
                     className={`resize-none ${fieldClass(contactErrors.message)}`}
                   />
-                  <FieldError show={contactErrors.message} message={strings.helpFieldRequiredError[lang]} />
+                  <FieldError
+                    show={contactErrors.message}
+                    message={strings.helpFieldRequiredError[lang]}
+                    id={`${idBase}-contact-message-error`}
+                  />
                 </label>
                 <button
                   onClick={submitContact}
@@ -518,10 +554,16 @@ export function HelpSupportView({ lang }: { lang: Lang }) {
             ) : (
               <div className="flex flex-col gap-3">
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-xs font-medium text-foreground-muted">{strings.helpProblemCategoryLabel[lang]}</span>
+                  <span className="text-xs font-medium text-foreground-muted">
+                    {strings.helpProblemCategoryLabel[lang]} <span aria-hidden>*</span>
+                  </span>
                   <select
                     value={reportForm.category}
                     onChange={(e) => setReportForm((f) => ({ ...f, category: e.target.value as ProblemCategory }))}
+                    required
+                    aria-required="true"
+                    aria-invalid={reportErrors.category || undefined}
+                    aria-describedby={reportErrors.category ? `${idBase}-report-category-error` : undefined}
                     className={fieldClass(reportErrors.category)}
                   >
                     <option value="">{strings.helpSelectCategoryPlaceholder[lang]}</option>
@@ -531,18 +573,32 @@ export function HelpSupportView({ lang }: { lang: Lang }) {
                       </option>
                     ))}
                   </select>
-                  <FieldError show={reportErrors.category} message={strings.helpSelectCategoryError[lang]} />
+                  <FieldError
+                    show={reportErrors.category}
+                    message={strings.helpSelectCategoryError[lang]}
+                    id={`${idBase}-report-category-error`}
+                  />
                 </label>
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-xs font-medium text-foreground-muted">{strings.helpDescriptionLabel[lang]}</span>
+                  <span className="text-xs font-medium text-foreground-muted">
+                    {strings.helpDescriptionLabel[lang]} <span aria-hidden>*</span>
+                  </span>
                   <textarea
                     value={reportForm.description}
                     onChange={(e) => setReportForm((f) => ({ ...f, description: e.target.value }))}
                     rows={4}
                     placeholder={strings.helpDescriptionPlaceholder[lang]}
+                    required
+                    aria-required="true"
+                    aria-invalid={reportErrors.description || undefined}
+                    aria-describedby={reportErrors.description ? `${idBase}-report-description-error` : undefined}
                     className={`resize-none ${fieldClass(reportErrors.description)}`}
                   />
-                  <FieldError show={reportErrors.description} message={strings.helpFieldRequiredError[lang]} />
+                  <FieldError
+                    show={reportErrors.description}
+                    message={strings.helpFieldRequiredError[lang]}
+                    id={`${idBase}-report-description-error`}
+                  />
                 </label>
                 <div className="flex flex-col gap-1.5">
                   <span className="text-xs font-medium text-foreground-muted">{strings.helpAttachScreenshotLabel[lang]}</span>
@@ -602,10 +658,25 @@ export function HelpSupportView({ lang }: { lang: Lang }) {
             ) : (
               <div className="flex flex-col gap-3">
                 <div className="flex flex-col gap-1.5">
-                  <span className="text-xs font-medium text-foreground-muted">{strings.helpRatingLabel[lang]}</span>
-                  <div className="flex items-center gap-1">
+                  <span id={`${idBase}-rating-label`} className="text-xs font-medium text-foreground-muted">
+                    {strings.helpRatingLabel[lang]} <span aria-hidden>*</span>
+                  </span>
+                  <div
+                    role="radiogroup"
+                    aria-labelledby={`${idBase}-rating-label`}
+                    aria-describedby={feedbackErrors.rating ? `${idBase}-rating-error` : undefined}
+                    className="flex items-center gap-1"
+                  >
                     {[1, 2, 3, 4, 5].map((n) => (
-                      <button key={n} type="button" onClick={() => setFeedbackRating(n)} aria-label={`${n} star`} className="p-0.5">
+                      <button
+                        key={n}
+                        type="button"
+                        role="radio"
+                        aria-checked={n === feedbackRating}
+                        onClick={() => setFeedbackRating(n)}
+                        aria-label={`${n} star`}
+                        className="p-0.5"
+                      >
                         <Star
                           size={22}
                           strokeWidth={1.75}
@@ -614,13 +685,19 @@ export function HelpSupportView({ lang }: { lang: Lang }) {
                       </button>
                     ))}
                   </div>
-                  <FieldError show={feedbackErrors.rating} message={strings.helpRatingError[lang]} />
+                  <FieldError show={feedbackErrors.rating} message={strings.helpRatingError[lang]} id={`${idBase}-rating-error`} />
                 </div>
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-xs font-medium text-foreground-muted">{strings.helpFeedbackTypeLabel[lang]}</span>
+                  <span className="text-xs font-medium text-foreground-muted">
+                    {strings.helpFeedbackTypeLabel[lang]} <span aria-hidden>*</span>
+                  </span>
                   <select
                     value={feedbackType}
                     onChange={(e) => setFeedbackType(e.target.value as FeedbackType)}
+                    required
+                    aria-required="true"
+                    aria-invalid={feedbackErrors.type || undefined}
+                    aria-describedby={feedbackErrors.type ? `${idBase}-feedback-type-error` : undefined}
                     className={fieldClass(feedbackErrors.type)}
                   >
                     <option value="">{strings.helpSelectCategoryPlaceholder[lang]}</option>
@@ -630,18 +707,32 @@ export function HelpSupportView({ lang }: { lang: Lang }) {
                       </option>
                     ))}
                   </select>
-                  <FieldError show={feedbackErrors.type} message={strings.helpSelectCategoryError[lang]} />
+                  <FieldError
+                    show={feedbackErrors.type}
+                    message={strings.helpSelectCategoryError[lang]}
+                    id={`${idBase}-feedback-type-error`}
+                  />
                 </label>
                 <label className="flex flex-col gap-1.5">
-                  <span className="text-xs font-medium text-foreground-muted">{strings.helpFeedbackMessageLabel[lang]}</span>
+                  <span className="text-xs font-medium text-foreground-muted">
+                    {strings.helpFeedbackMessageLabel[lang]} <span aria-hidden>*</span>
+                  </span>
                   <textarea
                     value={feedbackMessage}
                     onChange={(e) => setFeedbackMessage(e.target.value)}
                     rows={4}
                     placeholder={strings.helpFeedbackMessagePlaceholder[lang]}
+                    required
+                    aria-required="true"
+                    aria-invalid={feedbackErrors.message || undefined}
+                    aria-describedby={feedbackErrors.message ? `${idBase}-feedback-message-error` : undefined}
                     className={`resize-none ${fieldClass(feedbackErrors.message)}`}
                   />
-                  <FieldError show={feedbackErrors.message} message={strings.helpMessageTooShortError[lang]} />
+                  <FieldError
+                    show={feedbackErrors.message}
+                    message={strings.helpMessageTooShortError[lang]}
+                    id={`${idBase}-feedback-message-error`}
+                  />
                 </label>
                 <div className="flex flex-col gap-1.5">
                   <span className="text-xs font-medium text-foreground-muted">{strings.helpAttachScreenshotLabel[lang]}</span>

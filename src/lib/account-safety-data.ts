@@ -173,15 +173,37 @@ export type MockSession = {
   id: string;
   device: string;
   browser: string;
+  location: string;
   isCurrent: boolean;
   lastActive: { en: string; bn: string };
 };
 
 export function seedSessions(): MockSession[] {
   return [
-    { id: "sess-1", device: "Windows", browser: "Chrome", isCurrent: true, lastActive: { en: "Active now", bn: "এখন সক্রিয়" } },
-    { id: "sess-2", device: "Android", browser: "Chrome", isCurrent: false, lastActive: { en: "2 days ago", bn: "২ দিন আগে" } },
-    { id: "sess-3", device: "macOS", browser: "Safari", isCurrent: false, lastActive: { en: "1 week ago", bn: "১ সপ্তাহ আগে" } },
+    {
+      id: "sess-1",
+      device: "Windows",
+      browser: "Chrome",
+      location: "Dhaka, Bangladesh",
+      isCurrent: true,
+      lastActive: { en: "Active now", bn: "এখন সক্রিয়" },
+    },
+    {
+      id: "sess-2",
+      device: "Android",
+      browser: "Chrome",
+      location: "Dhaka, Bangladesh",
+      isCurrent: false,
+      lastActive: { en: "2 days ago", bn: "২ দিন আগে" },
+    },
+    {
+      id: "sess-3",
+      device: "macOS",
+      browser: "Safari",
+      location: "Chattogram, Bangladesh",
+      isCurrent: false,
+      lastActive: { en: "1 week ago", bn: "১ সপ্তাহ আগে" },
+    },
   ];
 }
 

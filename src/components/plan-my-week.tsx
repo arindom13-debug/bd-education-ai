@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { AnimatePresence, motion, Reorder, useDragControls } from "framer-motion";
-import { ChevronLeft, GripVertical, Pencil, Plus, RotateCcw, Trash2 } from "lucide-react";
+import { ChevronLeft, GripVertical, Pencil, Plus, RotateCcw, Trash2, X } from "lucide-react";
 import { Modal } from "@/components/modal";
 import { strings, type Lang } from "@/lib/i18n";
 import type { Subject } from "@/lib/curriculum-data";
@@ -30,6 +30,7 @@ import { Tooltip } from "@/components/tooltip";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 const weeklyHourOptions = [4, 7, 10, 14, 20];
+const GENERATE_ERROR_RATE = 1 / 12;
 
 const stepVariants = {
   enter: { opacity: 0, x: 16 },
@@ -302,13 +303,22 @@ export function PlanMyWeek({
   const [addOpen, setAddOpen] = useState(false);
   const [confirmRegenerateOpen, setConfirmRegenerateOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [generateError, setGenerateError] = useState(false);
 
   const toggle = (list: number[], value: number) =>
     list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 
   const generate = () => {
+    setGenerateError(false);
     setGenerating(true);
     setTimeout(() => {
+      setGenerating(false);
+      // On failure nothing here changes — activeDays/priorities/step all stay
+      // exactly as the student left them, so Retry just re-runs this attempt.
+      if (Math.random() < GENERATE_ERROR_RATE) {
+        setGenerateError(true);
+        return;
+      }
       setGenerated(
         generateWeekPlan(
           subjects,
@@ -323,7 +333,6 @@ export function PlanMyWeek({
       setOpenRowId(null);
       setAddOpen(false);
       setStep(3);
-      setGenerating(false);
     }, 500);
   };
 
@@ -606,6 +615,22 @@ export function PlanMyWeek({
             )}
           </motion.div>
         </AnimatePresence>
+
+        {generateError && (step === 2 || step === 3) && (
+          <div role="alert" className="flex items-center gap-3 rounded-lg bg-danger/10 px-3 py-2 text-xs text-danger">
+            <span className="flex-1">{strings.schedulePlanGenerateFailedDesc[lang]}</span>
+            <button onClick={generate} className="shrink-0 font-medium underline underline-offset-2 hover:opacity-80">
+              {strings.retryBtn[lang]}
+            </button>
+            <button
+              onClick={() => setGenerateError(false)}
+              aria-label={strings.dismissErrorLabel[lang]}
+              className="shrink-0 rounded-md p-1 hover:bg-danger/10"
+            >
+              <X size={12} strokeWidth={2} />
+            </button>
+          </div>
+        )}
 
         {step === 3 && editing ? (
           <div className="flex items-center justify-between border-t border-border pt-4">

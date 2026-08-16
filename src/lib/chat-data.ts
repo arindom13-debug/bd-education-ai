@@ -5,11 +5,14 @@ export type MessageAttachment = {
   kind: MessageAttachmentKind;
 };
 
+export type MessageFeedback = "helpful" | "unhelpful";
+
 export type ChatMessage = {
   role: "user" | "ai";
   text: { en: string; bn: string };
   source?: { en: string; bn: string };
   attachment?: MessageAttachment;
+  feedback?: MessageFeedback;
 };
 
 export type ConversationContext = "learning" | "revision" | "practice";
@@ -22,6 +25,7 @@ export type ChatThread = {
   context: ConversationContext;
   relativeTime: { en: string; bn: string };
   messages: ChatMessage[];
+  archived?: boolean;
 };
 
 export const onboardingThread: ChatThread = {

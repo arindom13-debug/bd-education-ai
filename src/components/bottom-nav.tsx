@@ -24,7 +24,7 @@ export function BottomNav({
   onSelect: (id: CanvasView) => void;
 }) {
   return (
-    <nav className="flex items-stretch border-t border-border bg-sidebar">
+    <nav aria-label={strings.mainNavigationLabel[lang]} className="flex items-stretch border-t border-border bg-sidebar">
       {tabs.map((tab) => {
         const isActive = active === tab.id;
         return (

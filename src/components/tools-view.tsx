@@ -214,7 +214,15 @@ export function ToolsView({
                 {groupTools.map((tool) => (
                   <div
                     key={tool.id}
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setActiveTool(tool.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        setActiveTool(tool.id);
+                      }
+                    }}
                     className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border bg-surface p-6 transition-colors duration-200 hover:bg-surface-muted"
                   >
                     <div className="relative flex flex-col gap-4">
