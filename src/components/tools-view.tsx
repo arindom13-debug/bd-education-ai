@@ -143,6 +143,7 @@ export function ToolsView({
   onReorderCountdowns,
   timer,
   timerActions,
+  newNoteToken = 0,
 }: {
   lang: Lang;
   countdowns: Countdown[];
@@ -153,8 +154,17 @@ export function ToolsView({
   onReorderCountdowns: (countdowns: Countdown[]) => void;
   timer: TimerState;
   timerActions: TimerActions;
+  newNoteToken?: number;
 }) {
   const [activeTool, setActiveTool] = useState<ToolId | null>(null);
+  // Ctrl/Cmd+Shift+N (app-shell) bumps this token — jump straight to the
+  // Notebook, same as clicking its card. 0 is the sentinel "no request yet"
+  // so a fresh mount never misfires on a token that's already been seen.
+  const [consumedNewNoteToken, setConsumedNewNoteToken] = useState(0);
+  if (newNoteToken !== 0 && newNoteToken !== consumedNewNoteToken) {
+    setConsumedNewNoteToken(newNoteToken);
+    setActiveTool("notebook");
+  }
   const active = tools.find((t) => t.id === activeTool);
   const continueTool = tools.find((t) => t.id === "notebook")!;
 

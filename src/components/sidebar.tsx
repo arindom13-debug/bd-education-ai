@@ -45,7 +45,8 @@ export type CanvasView =
   | "usage"
   | "billing"
   | "help"
-  | "whatsNew";
+  | "whatsNew"
+  | "invite";
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -191,8 +192,15 @@ export function Sidebar({
         setMenuOpen(false);
       }
     }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setMenuOpen(false);
+    }
     document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
   }, [menuOpen]);
 
   return (

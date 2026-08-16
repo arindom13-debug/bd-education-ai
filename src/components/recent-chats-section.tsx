@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { History, ArrowRight } from "lucide-react";
+import { History, ArrowRight, MessageSquare } from "lucide-react";
 import { strings, type Lang } from "@/lib/i18n";
 import { chatHistory, type ConversationContext } from "@/lib/chat-data";
 import { subjects } from "@/lib/curriculum-data";
@@ -37,6 +37,15 @@ export function RecentChatsSection({
         <History size={13} strokeWidth={1.75} />
         {strings.recentChatsLabel[lang]}
       </p>
+      {chatHistory.length === 0 ? (
+        <div className="flex flex-col items-center gap-2 py-6 text-center">
+          <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-surface-muted text-foreground-muted">
+            <MessageSquare size={18} strokeWidth={1.75} />
+          </div>
+          <p className="text-sm font-medium">{strings.noChatsTitle[lang]}</p>
+          <p className="max-w-60 text-xs text-foreground-muted">{strings.noChatsDesc[lang]}</p>
+        </div>
+      ) : (
       <div className="flex flex-col gap-3">
         {GROUPS.map((group) => {
           const threads = chatHistory.filter((t) => t.group === group.key);
@@ -75,6 +84,7 @@ export function RecentChatsSection({
           );
         })}
       </div>
+      )}
     </motion.div>
   );
 }

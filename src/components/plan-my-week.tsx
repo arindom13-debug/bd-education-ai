@@ -301,25 +301,30 @@ export function PlanMyWeek({
   const [openRowId, setOpenRowId] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [confirmRegenerateOpen, setConfirmRegenerateOpen] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   const toggle = (list: number[], value: number) =>
     list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
 
   const generate = () => {
-    setGenerated(
-      generateWeekPlan(
-        subjects,
-        plan,
-        schedule,
-        { activeDays, prioritySubjectIds, weeklyMinutes: weeklyHours * 60, sessionMinutes, breakMinutes },
-        todayKey()
-      )
-    );
-    setEditing(false);
-    setDraft([]);
-    setOpenRowId(null);
-    setAddOpen(false);
-    setStep(3);
+    setGenerating(true);
+    setTimeout(() => {
+      setGenerated(
+        generateWeekPlan(
+          subjects,
+          plan,
+          schedule,
+          { activeDays, prioritySubjectIds, weeklyMinutes: weeklyHours * 60, sessionMinutes, breakMinutes },
+          todayKey()
+        )
+      );
+      setEditing(false);
+      setDraft([]);
+      setOpenRowId(null);
+      setAddOpen(false);
+      setStep(3);
+      setGenerating(false);
+    }, 500);
   };
 
   // Any edit that has already been folded into `generated` via a prior Save
@@ -483,10 +488,11 @@ export function PlanMyWeek({
                     )}
                     <button
                       onClick={requestRegenerate}
-                      className="flex items-center gap-1 text-xs font-medium text-foreground-muted transition-colors duration-150 hover:text-foreground"
+                      disabled={generating}
+                      className="flex items-center gap-1 text-xs font-medium text-foreground-muted transition-colors duration-150 hover:text-foreground disabled:opacity-40"
                     >
-                      <RotateCcw size={12} strokeWidth={1.75} />
-                      {strings.schedulePlanRegenerate[lang]}
+                      <RotateCcw size={12} strokeWidth={1.75} className={generating ? "animate-spin" : ""} />
+                      {generating ? strings.schedulePlanGenerating[lang] : strings.schedulePlanRegenerate[lang]}
                     </button>
                   </div>
                 </div>
@@ -633,10 +639,10 @@ export function PlanMyWeek({
             ) : step === 2 ? (
               <button
                 onClick={generate}
-                disabled={activeDays.length === 0}
+                disabled={activeDays.length === 0 || generating}
                 className="rounded-lg bg-accent px-5 py-2 text-sm font-medium text-accent-foreground disabled:opacity-40"
               >
-                {strings.schedulePlanGenerate[lang]}
+                {generating ? strings.schedulePlanGenerating[lang] : strings.schedulePlanGenerate[lang]}
               </button>
             ) : (
               <button

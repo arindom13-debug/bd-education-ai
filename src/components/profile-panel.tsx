@@ -12,6 +12,7 @@ import {
   CreditCard,
   HelpCircle,
   Sparkles,
+  UserPlus,
   LogOut,
   type LucideIcon,
 } from "lucide-react";
@@ -78,6 +79,7 @@ export function ProfilePanel({
     { view: "billing", icon: CreditCard, label: strings.accountMenuBilling[lang] },
     { view: "help", icon: HelpCircle, label: strings.accountMenuHelp[lang] },
     { view: "whatsNew", icon: Sparkles, label: strings.accountMenuWhatsNew[lang] },
+    { view: "invite", icon: UserPlus, label: strings.accountMenuInviteFriends[lang] },
   ];
 
   return (

@@ -8,10 +8,13 @@ import {
   curriculumTrackOptions,
   classLevelOptions,
   examTargetOptions,
+  dailyMinutesOptions,
   type StudyPlan,
 } from "@/lib/study-plan";
 import { subjects } from "@/lib/curriculum-data";
 import { Modal } from "@/components/modal";
+import type { ChatLanguage } from "@/lib/chat-language";
+import type { CanvasView } from "@/components/sidebar";
 import {
   onboardingQuestions,
   TOTAL_QUESTIONS,
@@ -23,6 +26,11 @@ import {
   type OnboardingAnswerValue,
   type OnboardingProgress,
 } from "@/lib/onboarding";
+
+const CHAT_LANGUAGE_OPTIONS: { value: ChatLanguage; label: string }[] = [
+  { value: "bn", label: "বাংলা" },
+  { value: "en", label: "English" },
+];
 
 const EASE = [0.16, 1, 0.3, 1] as const;
 
@@ -189,10 +197,16 @@ export function SetupView({
   lang,
   plan,
   onChange,
+  chatLanguage,
+  onChangeChatLanguage,
+  onNavigate,
 }: {
   lang: Lang;
   plan: StudyPlan;
   onChange: (patch: Partial<StudyPlan>) => void;
+  chatLanguage: ChatLanguage;
+  onChangeChatLanguage: (value: ChatLanguage) => void;
+  onNavigate: (view: CanvasView) => void;
 }) {
   const [progress, setProgress] = useState<OnboardingProgress>(() => loadOnboardingProgress());
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -209,11 +223,22 @@ export function SetupView({
     commit({ ...progress, answers: { ...progress.answers, [id]: value } });
 
   const stepIndex = Math.min(progress.step, TOTAL_QUESTIONS);
-  const hasProgress = progress.completed || progress.step > 0 || Object.keys(progress.answers).length > 0;
+  // plan.name is checked too — the basics step commits each field to plan
+  // immediately as the student fills it in, so a name typed but not yet
+  // "continued" past still counts as progress, not a reason to show the
+  // intro again on the next visit.
+  const hasProgress =
+    progress.completed ||
+    progress.basicsCompleted ||
+    progress.step > 0 ||
+    Object.keys(progress.answers).length > 0 ||
+    plan.name.trim() !== "";
   const showIntro = !hasProgress && !introDismissed;
+  const showBasics = !showIntro && !progress.completed && !progress.basicsCompleted;
   const flowQuestion: DeepQuestion | null = stepIndex < TOTAL_QUESTIONS ? onboardingQuestions[stepIndex] : null;
   const editQuestion: DeepQuestion | null = editingId ? onboardingQuestions[getQuestionIndex(editingId)] ?? null : null;
-  const activeQuestion = showIntro ? null : editQuestion ?? flowQuestion;
+  const activeQuestion = showIntro || showBasics ? null : editQuestion ?? flowQuestion;
+  const completeBasics = () => commit({ ...progress, basicsCompleted: true });
 
   const exitEditing = () => setEditingId(null);
   const exitToProfile = () => commit({ ...progress, step: TOTAL_QUESTIONS });
@@ -280,7 +305,7 @@ export function SetupView({
     setEditingId(null);
     setIntroDismissed(false);
     onChange({ examTarget: "", weakSubjects: [], strongSubjects: [] });
-    commit({ step: 0, answers: {}, completed: false });
+    commit({ step: 0, answers: {}, completed: false, basicsCompleted: false });
   };
 
   // Keyboard support: Escape cancels an edit-jump or closes the restart
@@ -357,6 +382,109 @@ export function SetupView({
             className="flex items-center gap-1.5 rounded-lg bg-accent px-6 py-2.5 text-sm font-medium text-accent-foreground"
           >
             {strings.startBtn[lang]}
+            <ArrowRight size={15} strokeWidth={2} />
+          </button>
+        </motion.div>
+      </div>
+    );
+  }
+
+  // ===================== BASICS (name, class, curriculum, study language/time) =====================
+  // A one-time prelude, tracked separately from the 10 deep questions so
+  // their own progress count ("X / 10") never includes it.
+  if (showBasics) {
+    return (
+      <div className="mx-auto flex min-h-dvh w-full max-w-lg flex-col justify-center p-5 sm:p-8">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3, ease: EASE }}
+          className="flex flex-col gap-5"
+        >
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground-strong">{strings.setupBasicsTitle[lang]}</h1>
+            <p className="mt-2 text-sm text-foreground-muted">{strings.setupBasicsSubtitle[lang]}</p>
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <label className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
+                {strings.qNameTitle[lang]}
+              </span>
+              <input
+                value={plan.name}
+                onChange={(e) => onChange({ name: e.target.value })}
+                placeholder={strings.namePlaceholder[lang]}
+                className="rounded-lg border border-border bg-control px-3 py-2 text-sm outline-none transition-colors duration-150 placeholder:text-foreground-faint focus:border-foreground-faint"
+              />
+            </label>
+
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
+                {strings.setupBasicsClassLabel[lang]}
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {classLevelOptions.map((opt) => (
+                  <Chip key={opt.value} active={plan.classLevel === opt.value} onClick={() => onChange({ classLevel: opt.value })}>
+                    {opt.label[lang]}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
+                {strings.setupBasicsCurriculumLabel[lang]}
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {curriculumTrackOptions.map((opt) => (
+                  <Chip
+                    key={opt.value}
+                    active={plan.curriculumTrack === opt.value}
+                    onClick={() => onChange({ curriculumTrack: opt.value })}
+                  >
+                    {opt.label[lang]}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
+                {strings.setupBasicsLanguageLabel[lang]}
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {CHAT_LANGUAGE_OPTIONS.map((opt) => (
+                  <Chip key={opt.value} active={chatLanguage === opt.value} onClick={() => onChangeChatLanguage(opt.value)}>
+                    {opt.label}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium uppercase tracking-wide text-foreground-muted">
+                {strings.setupBasicsStudyTimeLabel[lang]}
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {dailyMinutesOptions.map((opt) => (
+                  <Chip
+                    key={opt.value}
+                    active={plan.dailyMinutes === opt.value}
+                    onClick={() => onChange({ dailyMinutes: opt.value })}
+                  >
+                    {opt.label[lang]}
+                  </Chip>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <button
+            onClick={completeBasics}
+            className="flex items-center gap-1.5 self-start rounded-lg bg-accent px-6 py-2.5 text-sm font-medium text-accent-foreground"
+          >
+            {strings.continueBtn[lang]}
             <ArrowRight size={15} strokeWidth={2} />
           </button>
         </motion.div>
@@ -503,13 +631,27 @@ export function SetupView({
             <Check size={13} strokeWidth={2.5} />
             {TOTAL_QUESTIONS} / {TOTAL_QUESTIONS} {strings.profileReadyLabel[lang]}
           </motion.span>
-          <button
-            onClick={finishFlow}
-            className="flex items-center gap-1.5 rounded-lg bg-accent px-6 py-2.5 text-sm font-medium text-accent-foreground"
-          >
-            {strings.viewProfileBtn[lang]}
-            <ArrowRight size={15} strokeWidth={2} />
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => {
+                finishFlow();
+                onNavigate("chat");
+              }}
+              className="flex items-center gap-1.5 rounded-lg bg-accent px-6 py-2.5 text-sm font-medium text-accent-foreground"
+            >
+              {strings.startLearning[lang]}
+              <ArrowRight size={15} strokeWidth={2} />
+            </button>
+            <button
+              onClick={() => {
+                finishFlow();
+                onNavigate("progress");
+              }}
+              className="rounded-lg border border-border px-6 py-2.5 text-sm text-foreground-muted transition-colors duration-150 hover:text-foreground"
+            >
+              {strings.setupGoToStudentHubBtn[lang]}
+            </button>
+          </div>
         </motion.div>
       </div>
     );

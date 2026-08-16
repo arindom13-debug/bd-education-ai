@@ -1,7 +1,15 @@
+export type MessageAttachmentKind = "pdf" | "doc" | "image" | "txt";
+
+export type MessageAttachment = {
+  name: string;
+  kind: MessageAttachmentKind;
+};
+
 export type ChatMessage = {
   role: "user" | "ai";
   text: { en: string; bn: string };
   source?: { en: string; bn: string };
+  attachment?: MessageAttachment;
 };
 
 export type ConversationContext = "learning" | "revision" | "practice";

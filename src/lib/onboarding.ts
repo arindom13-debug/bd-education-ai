@@ -7,12 +7,17 @@ export type OnboardingProgress = {
   step: number;
   answers: OnboardingAnswers;
   completed: boolean;
+  /** Whether the one-time "basics" prelude (name/class/curriculum/study
+   * language/study time) has been passed. Tracked separately from the 10
+   * deep questions so their own "X / 10" progress count never includes it. */
+  basicsCompleted: boolean;
 };
 
 export const defaultOnboardingProgress: OnboardingProgress = {
   step: 0,
   answers: {},
   completed: false,
+  basicsCompleted: false,
 };
 
 // Local-only persistence for now — the OnboardingProgress shape is what a
@@ -34,6 +39,7 @@ export function loadOnboardingProgress(): OnboardingProgress {
           ? (parsed.answers as OnboardingAnswers)
           : {},
       completed: parsed.completed === true,
+      basicsCompleted: parsed.basicsCompleted === true,
     };
   } catch {
     return defaultOnboardingProgress;

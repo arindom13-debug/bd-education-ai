@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { AnimatePresence, MotionConfig, motion } from "framer-motion";
-import { Menu, PanelLeftOpen, Sun, Moon } from "lucide-react";
+import { Menu, PanelLeftOpen, Sun, Moon, Search } from "lucide-react";
 import { Sidebar, BrandMark, type CanvasView } from "@/components/sidebar";
 import { BottomNav } from "@/components/bottom-nav";
 import { ChatView } from "@/components/chat-view";
@@ -19,6 +19,10 @@ import { UsageView } from "@/components/usage-view";
 import { BillingView } from "@/components/billing-view";
 import { HelpSupportView } from "@/components/help-support-view";
 import { WhatsNewView } from "@/components/whats-new-view";
+import { InviteFriendsView } from "@/components/invite-friends-view";
+import { NotificationBell } from "@/components/notification-bell";
+import { GlobalSearch } from "@/components/global-search";
+import { KeyboardShortcutsModal } from "@/components/keyboard-shortcuts-modal";
 import { Tooltip } from "@/components/tooltip";
 import { strings, type Lang } from "@/lib/i18n";
 import { chatHistory, onboardingThread } from "@/lib/chat-data";
@@ -36,6 +40,12 @@ import {
   type ThemePreference,
 } from "@/lib/theme";
 import { defaultCountdowns, getMainCountdown, type Countdown } from "@/lib/countdowns";
+import {
+  seedNotifications,
+  defaultNotificationPreferences,
+  type AppNotification,
+  type NotificationPreferences,
+} from "@/lib/notifications-data";
 import { MainCountdownStrip } from "@/components/main-countdown-strip";
 import { StudyTimerPill } from "@/components/study-timer-pill";
 import { StudyScheduleView } from "@/components/study-schedule-view";
@@ -276,6 +286,25 @@ export function AppShell() {
     setChatLanguageState(value);
     saveChatLanguage(value);
   };
+
+  // Mock/local only — no persistence, matches the rest of the notification
+  // system's frontend-only scope.
+  const [notifications, setNotifications] = useState<AppNotification[]>(() => seedNotifications());
+  const markNotificationRead = (id: string) =>
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+  const markAllNotificationsRead = () => setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+  const dismissNotification = (id: string) => setNotifications((prev) => prev.filter((n) => n.id !== id));
+
+  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>(
+    defaultNotificationPreferences
+  );
+  const updateNotificationPreference = (key: keyof NotificationPreferences, value: boolean) =>
+    setNotificationPreferences((prev) => ({ ...prev, [key]: value }));
+
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [newNoteToken, setNewNoteToken] = useState(0);
+
   const [plan, setPlan] = useState<StudyPlan>(() => loadStudyPlan());
   const updatePlan = (patch: Partial<StudyPlan>) =>
     setPlan((p) => {
@@ -440,6 +469,30 @@ export function AppShell() {
     setHistoryOpen(false);
   };
 
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      if (key === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      } else if (key === "n" && e.shiftKey) {
+        e.preventDefault();
+        selectView("tools");
+        setNewNoteToken((t) => t + 1);
+      } else if (key === "n") {
+        e.preventDefault();
+        newChat();
+      } else if (e.key === "/") {
+        e.preventDefault();
+        setShortcutsOpen(true);
+      }
+    };
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, []);
+
   // Drag the sidebar's right edge to resize it, or drag it far enough left to
   // collapse it. Width tracks the pointer directly (no transition) while the
   // drag is active; releasing snaps it via the normal CSS transition.
@@ -518,8 +571,22 @@ export function AppShell() {
       </AnimatePresence>
       {!studySessionActive && (
     <div className="min-h-dvh" style={{ "--sidebar-w": `${asideWidth}px` } as React.CSSProperties}>
-      <div className="fixed right-4 top-4 z-30 hidden md:block">
+      <div className="fixed right-4 top-4 z-30 hidden items-center gap-2 md:flex">
         <StudyTimerPill lang={lang} timer={timerState} actions={timerActions} subjects={subjects} />
+        <button
+          onClick={() => setSearchOpen(true)}
+          aria-label={strings.searchButtonLabel[lang]}
+          className="rounded-md border border-border p-1.5 text-foreground-muted transition-colors duration-150 hover:text-foreground"
+        >
+          <Search size={14} strokeWidth={1.75} />
+        </button>
+        <NotificationBell
+          lang={lang}
+          notifications={notifications}
+          onMarkRead={markNotificationRead}
+          onMarkAllRead={markAllNotificationsRead}
+          onDismiss={dismissNotification}
+        />
       </div>
       <aside
         style={{
@@ -601,6 +668,20 @@ export function AppShell() {
         </div>
         <div className="flex items-center gap-1.5">
           <StudyTimerPill lang={lang} timer={timerState} actions={timerActions} subjects={subjects} />
+          <button
+            onClick={() => setSearchOpen(true)}
+            aria-label={strings.searchButtonLabel[lang]}
+            className="rounded-md border border-border p-1.5 text-foreground-muted transition-colors duration-150 hover:text-foreground"
+          >
+            <Search size={14} strokeWidth={1.75} />
+          </button>
+          <NotificationBell
+            lang={lang}
+            notifications={notifications}
+            onMarkRead={markNotificationRead}
+            onMarkAllRead={markAllNotificationsRead}
+            onDismiss={dismissNotification}
+          />
           <button
             onClick={toggleTheme}
             aria-label={theme === "dark" ? strings.switchToLightModeLabel[lang] : strings.switchToDarkModeLabel[lang]}
@@ -709,7 +790,14 @@ export function AppShell() {
               />
             )}
             {view === "setup" && (
-              <SetupView lang={lang} plan={plan} onChange={updatePlan} />
+              <SetupView
+                lang={lang}
+                plan={plan}
+                onChange={updatePlan}
+                chatLanguage={chatLanguage}
+                onChangeChatLanguage={setChatLanguage}
+                onNavigate={selectView}
+              />
             )}
             {view === "tools" && (
               <ToolsView
@@ -722,6 +810,7 @@ export function AppShell() {
                 onReorderCountdowns={reorderCountdowns}
                 timer={timerState}
                 timerActions={timerActions}
+                newNoteToken={newNoteToken}
               />
             )}
             {view === "examMode" && (
@@ -747,12 +836,15 @@ export function AppShell() {
                 onSetThemePreference={setThemePreference}
                 chatLanguage={chatLanguage}
                 onChangeChatLanguage={setChatLanguage}
+                notificationPreferences={notificationPreferences}
+                onChangeNotificationPreference={updateNotificationPreference}
               />
             )}
             {view === "usage" && <UsageView lang={lang} onNavigate={selectView} />}
             {view === "billing" && <BillingView lang={lang} />}
             {view === "help" && <HelpSupportView lang={lang} />}
             {view === "whatsNew" && <WhatsNewView lang={lang} />}
+            {view === "invite" && <InviteFriendsView lang={lang} studentName={studentName} />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -797,6 +889,22 @@ export function AppShell() {
       </div>
     </div>
       )}
+      <GlobalSearch
+        lang={lang}
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        subjects={subjects}
+        scheduleState={scheduleState}
+        plan={plan}
+        onNavigate={selectView}
+        onSelectChat={selectChat}
+        onNewChat={newChat}
+      />
+      <AnimatePresence>
+        {shortcutsOpen && (
+          <KeyboardShortcutsModal lang={lang} onClose={() => setShortcutsOpen(false)} />
+        )}
+      </AnimatePresence>
     </MotionConfig>
   );
 }
